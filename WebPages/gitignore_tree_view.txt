@@ -1,0 +1,145 @@
+. (Andy)
+├── .claude
+├── Archive
+│   ├── Data
+│   │   └── DatabaseModels_2025-07-04_16-38-40.py
+│   ├── Interface
+│   │   ├── BookGrid_2025-07-04_16-38-40.py
+│   │   ├── FilterPanel_2025-07-04_16-38-40.py
+│   │   └── MainWindow_2025-07-04_16-38-40.py
+│   ├── AndersonLibrary_2025-07-04_16-38-40.py
+│   └── TestImports_2025-07-04_14-44-12.py
+├── Assets
+│   ├── Icons
+│   ├── icons
+│   ├── library
+│   ├── BowersWorld.png
+│   ├── Max.png
+│   ├── arrow.png
+│   ├── exit.png
+│   ├── hide.png
+│   ├── icon.png
+│   └── my_library.db
+├── Config
+├── CreateThumbs
+│   ├── ConvertToThumbnails.py
+│   └── ConvertToThumbnailsPart2.py
+├── Data
+│   ├── Covers
+│   ├── Databases
+│   ├── HTML
+│   ├── Spreadsheets
+│   │   ├── AndersonLibrary_LCEnhancementQueue.xlsx
+│   │   └── AndersonLibrary_PDFMetadata.csv
+│   ├── Text
+│   └── Thumbs
+├── Docs
+│   ├── 2025-07-04
+│   │   ├── MIGRATION_STEPS.md - Complete Migration Guide.pdf
+│   │   ├── Session.md
+│   │   ├── migration_instructions.md
+│   │   └── requirements_file.txt
+│   ├── API
+│   ├── Architecture
+│   │   └── Andy Highly Modular Structure.md
+│   ├── Daily
+│   │   └── 2025-07-04
+│   │       ├── MigrationGuide.md.pdf
+│   │       └── migration_guide.md
+│   ├── Development
+│   │   └── Some gitignore Rules.txt
+│   ├── Guides
+│   ├── Misc
+│   ├── Research
+│   ├── Standards
+│   │   ├── AIDEV-PascalCase-1.8.md
+│   │   ├── Design Standard v1.8.md
+│   │   └── Schema.pdf
+│   └── Updates
+│       ├── Updates_2025-07-04_14-10-53.md
+│       ├── Updates_2025-07-04_14-36-47.md
+│       ├── Updates_2025-07-04_14-44-12.md
+│       ├── Updates_2025-07-04_15-56-26.md
+│       ├── Updates_2025-07-04_16-38-40.md
+│       ├── Updates_2025-07-04_17-15-25.md
+│       ├── Updates_2025-07-04_17-20-35.md
+│       ├── Updates_2025-07-04_18-02-50.md
+│       └── Updates_2025-07-04_21-31-25.md
+├── HTML
+│   └── GoogleAuthorzeTest.html
+├── Legacy
+│   ├── Andy.py
+│   └── CustomWindow.py
+├── Scripts
+│   ├── Deployment
+│   │   ├── GitHubAutoUpdate.py
+│   │   ├── GitHubUpdateSite.py
+│   │   └── UpdatePopulate.py
+│   ├── Development
+│   │   └── QuickSetup.py
+│   ├── Maintenance
+│   │   └── generate_thumbnails.py
+│   ├── Migration
+│   │   ├── add_authors.py
+│   │   ├── add_authors_v2.py
+│   │   └── add_filepath_thumbnailpath.py
+│   ├── System
+│   │   ├── BackupProject.py
+│   │   ├── CodebaseSum.py
+│   │   ├── GPU OCR Speed Test.py
+│   │   ├── ListFilesByDate.py
+│   │   ├── MarkdownToText.py
+│   │   ├── SimpleTree.py
+│   │   ├── VerifyIgnore.py
+│   │   └── update_site.bat
+│   └── ThisApplication
+│       └── temp_db_inspector.py
+├── Source
+│   ├── Core
+│   │   ├── BookService.py
+│   │   ├── DatabaseManager.py
+│   │   └── __init__.py
+│   ├── Data
+│   │   ├── DatabaseModels.py
+│   │   ├── DatabaseModels_backup.py
+│   │   └── __init__.py
+│   ├── Framework
+│   │   └── __init__.py
+│   ├── Interface
+│   │   ├── BookGrid.py
+│   │   ├── CustomWindow.py
+│   │   ├── FilterPanel.py
+│   │   ├── MainWindow.py
+│   │   └── __init__.py
+│   ├── Utils
+│   │   ├── ColorTheme.py
+│   │   └── __init__.py
+│   └── __init__.py
+├── Tests
+│   ├── Data
+│   ├── Integration
+│   │   └── __init__.py
+│   ├── Unit
+│   │   └── __init__.py
+│   └── __init__.py
+├── Updates
+│   ├── CommunitySQLs
+│   │   ├── community_contribution_system.sql
+│   │   ├── community_platform_schema.sql
+│   │   ├── enhanced_incentive_schema.sql
+│   │   ├── enhanced_mylibrary_schema.sql
+│   │   ├── mysql_compatible_schema.sql
+│   │   ├── mysql_master_schema.sql
+│   │   ├── refined_library_schema.sql
+│   │   └── upgrade_ui_flow.html
+│   └── SQL
+├── WebPages
+│   ├── Assets
+│   ├── CSS
+│   └── JS
+├── .gitignore
+├── CodebaseSummary_20250705_091606.txt
+├── CodebaseSummary_20250705_093349.txt
+├── Results.txt
+├── __init__.py
+└── gitignore_tree_view.txt

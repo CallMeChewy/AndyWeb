@@ -1,0 +1,104 @@
+# Andy - .gitignore
+# Generated: 2025-07-04
+# Standard: AIDEV-PascalCase-1.8
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environments
+venv/
+env/
+ENV/
+.venv/
+.env/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Anderson's Library Specific
+## Data/Databases/*.db
+## Data/Databases/*.db-*
+Data/Cache/
+Data/Backups/
+Logs/
+*.log
+
+# Sensitive Configuration
+Config/Production/secrets.json
+Config/Production/api_keys.json
+.env
+.env.local
+.env.production
+
+# Large Files
+## Assets/Books/
+## Assets/Covers/
+## Assets/Thumbs/
+
+# Temporary Files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# OS Generated
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Coverage Reports
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+
+# Testing
+.pytest_cache/
+.tox/
+
+# Documentation builds
+docs/_build/
+docs/build/
+
+# Project-specific exclusions
+anderson-library-service-key.json
+config/
+secrets/
+*.json
+
+# Directories to ignore
+node_modules/
+**/Books/*
+**/Covers/*
+**/Thumbs/*
+
+# Special exclusion for directories starting with '..'
+..*
