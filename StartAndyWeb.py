@@ -134,7 +134,7 @@ class SmartAndyWebLauncher:
             import fastapi
             import uvicorn
             Logger.info("FastAPI dependencies found ✓")
-            return True
+            return True 
             
         except ImportError:
             Logger.warning("FastAPI not found. Attempting to install dependencies...")

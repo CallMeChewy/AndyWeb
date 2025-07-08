@@ -123,10 +123,8 @@ class BookResponse(BaseModel):
     author: Optional[str] = None
     category: Optional[str] = None
     subject: Optional[str] = None
-    rating: Optional[int] = None
     page_count: Optional[int] = None
     file_size: Optional[int] = None
-    file_path: Optional[str] = None
     created_date: Optional[str] = None
     modified_date: Optional[str] = None
 
@@ -157,7 +155,6 @@ class LibraryStatsResponse(BaseModel):
     total_subjects: int
     total_authors: int
     total_file_size: int
-    average_rating: float
     last_updated: str
 
 class HealthResponse(BaseModel):
@@ -207,10 +204,8 @@ def ConvertBookToResponse(BookRow: sqlite3.Row) -> BookResponse:
         author=BookRow['Author'],
         category=BookRow['Category'],
         subject=BookRow['Subject'],
-        rating=BookRow['Rating'],
         page_count=BookRow['PageCount'],
         file_size=BookRow['FileSize'],
-        file_path=BookRow['FilePath'],
         created_date=BookRow['CreatedDate'],
         modified_date=BookRow['ModifiedDate']
     )
@@ -344,7 +339,6 @@ async def SearchBooks(SearchRequest: BookSearchRequest):
             SearchQuery=SearchRequest.query,
             Category=SearchRequest.filters.get('category'),
             Subject=SearchRequest.filters.get('subject'),
-            MinRating=SearchRequest.filters.get('rating', 0),
             Limit=SearchRequest.limit,
             Offset=Offset
         )
@@ -353,8 +347,7 @@ async def SearchBooks(SearchRequest: BookSearchRequest):
         TotalCount = DatabaseManager.GetSearchResultCount(
             SearchQuery=SearchRequest.query,
             Category=SearchRequest.filters.get('category'),
-            Subject=SearchRequest.filters.get('subject'),
-            MinRating=SearchRequest.filters.get('rating', 0)
+            Subject=SearchRequest.filters.get('subject')
         )
         
         # Convert to response models
@@ -372,7 +365,6 @@ async def SearchBooks(SearchRequest: BookSearchRequest):
 async def FilterBooks(
     category: Optional[str] = Query(default=None, description="Filter by category"),
     subject: Optional[str] = Query(default=None, description="Filter by subject"),
-    min_rating: Optional[int] = Query(default=None, ge=0, le=5, description="Minimum rating"),
     page: int = Query(default=1, ge=1, description="Page number"),
     limit: int = Query(default=50, ge=1, le=100, description="Items per page")
 ):
@@ -393,7 +385,6 @@ async def FilterBooks(
         BooksData = DatabaseManager.GetBooksByFilters(
             Category=category,
             Subject=subject,
-            MinRating=min_rating or 0,
             Limit=limit,
             Offset=Offset
         )
@@ -401,8 +392,7 @@ async def FilterBooks(
         # Get total count
         TotalCount = DatabaseManager.GetFilteredBookCount(
             Category=category,
-            Subject=subject,
-            MinRating=min_rating or 0
+            Subject=subject
         )
         
         # Convert to response models
@@ -568,7 +558,6 @@ async def GetLibraryStats():
             total_subjects=Stats.get('TotalSubjects', 0),
             total_authors=Stats.get('TotalAuthors', 0),
             total_file_size=Stats.get('TotalFileSize', 0),
-            average_rating=Stats.get('AverageRating', 0.0),
             last_updated=datetime.now().isoformat()
         )
         

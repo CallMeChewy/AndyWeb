@@ -157,10 +157,12 @@ class DatabaseManager:
         Optimized for web applications with reasonable limits
         """
         Query = """
-        SELECT Id, Title, Author, Category, Subject, Rating, 
-               PageCount, FileSize, FilePath, CreatedDate, ModifiedDate
-        FROM Books 
-        ORDER BY Title ASC
+        SELECT B.Id, B.Title, B.Author, C.Category, S.Subject, 
+               B.PageCount, B.FileSize, B.CreatedDate, B.ModifiedDate
+        FROM Books B
+        LEFT JOIN Categories C ON B.CategoryId = C.Id
+        LEFT JOIN Subjects S ON B.SubjectId = S.Id
+        ORDER BY B.Title ASC
         """
         return self.ExecuteQuery(Query)
 
@@ -170,10 +172,12 @@ class DatabaseManager:
         Essential for mobile and large libraries
         """
         Query = """
-        SELECT Id, Title, Author, Category, Subject, Rating, 
-               PageCount, FileSize, FilePath, CreatedDate, ModifiedDate
-        FROM Books 
-        ORDER BY Title ASC
+        SELECT B.Id, B.Title, B.Author, C.Category, S.Subject, 
+               B.PageCount, B.FileSize, B.CreatedDate, B.ModifiedDate
+        FROM Books B
+        LEFT JOIN Categories C ON B.CategoryId = C.Id
+        LEFT JOIN Subjects S ON B.SubjectId = S.Id
+        ORDER BY B.Title ASC
         LIMIT ? OFFSET ?
         """
         return self.ExecuteQuery(Query, (Limit, Offset))
@@ -183,10 +187,12 @@ class DatabaseManager:
         Get specific book by ID for detailed views
         """
         Query = """
-        SELECT Id, Title, Author, Category, Subject, Rating, 
-               PageCount, FileSize, FilePath, CreatedDate, ModifiedDate
-        FROM Books 
-        WHERE Id = ?
+        SELECT B.Id, B.Title, B.Author, C.Category, S.Subject, 
+               B.PageCount, B.FileSize, B.CreatedDate, B.ModifiedDate
+        FROM Books B
+        LEFT JOIN Categories C ON B.CategoryId = C.Id
+        LEFT JOIN Subjects S ON B.SubjectId = S.Id
+        WHERE B.Id = ?
         """
         Results = self.ExecuteQuery(Query, (BookId,))
         return Results[0] if Results else None
@@ -210,38 +216,36 @@ class DatabaseManager:
         """
         # Build base query with search
         WhereConditions = [
-            "(Title LIKE ? OR Author LIKE ? OR Category LIKE ? OR Subject LIKE ?)"
+            "(B.Title LIKE ? OR B.Author LIKE ? OR C.Category LIKE ? OR S.Subject LIKE ?)"
         ]
         Parameters = [f"%{SearchQuery}%"] * 4
         
         # Add optional filters
         if Category:
-            WhereConditions.append("Category = ?")
+            WhereConditions.append("C.Category = ?")
             Parameters.append(Category)
             
         if Subject:
-            WhereConditions.append("Subject = ?")
+            WhereConditions.append("S.Subject = ?")
             Parameters.append(Subject)
             
-        if MinRating > 0:
-            WhereConditions.append("Rating >= ?")
-            Parameters.append(MinRating)
-        
         # Combine conditions
         WhereClause = " AND ".join(WhereConditions)
         
         Query = f"""
-        SELECT Id, Title, Author, Category, Subject, Rating, 
-               PageCount, FileSize, FilePath, CreatedDate, ModifiedDate
-        FROM Books 
+        SELECT B.Id, B.Title, B.Author, C.Category, S.Subject, 
+               B.PageCount, B.FileSize, B.CreatedDate, B.ModifiedDate
+        FROM Books B
+        LEFT JOIN Categories C ON B.CategoryId = C.Id
+        LEFT JOIN Subjects S ON B.SubjectId = S.Id
         WHERE {WhereClause}
         ORDER BY 
             CASE 
-                WHEN Title LIKE ? THEN 1 
-                WHEN Author LIKE ? THEN 2 
+                WHEN B.Title LIKE ? THEN 1 
+                WHEN B.Author LIKE ? THEN 2 
                 ELSE 3 
             END,
-            Title ASC
+            B.Title ASC
         LIMIT ? OFFSET ?
         """
         
@@ -257,24 +261,24 @@ class DatabaseManager:
         Get total count of search results for pagination
         """
         WhereConditions = [
-            "(Title LIKE ? OR Author LIKE ? OR Category LIKE ? OR Subject LIKE ?)"
+            "(B.Title LIKE ? OR B.Author LIKE ? OR C.Category LIKE ? OR S.Subject LIKE ?)"
         ]
         Parameters = [f"%{SearchQuery}%"] * 4
         
         if Category:
-            WhereConditions.append("Category = ?")
+            WhereConditions.append("C.Category = ?")
             Parameters.append(Category)
             
         if Subject:
-            WhereConditions.append("Subject = ?")
+            WhereConditions.append("S.Subject = ?")
             Parameters.append(Subject)
             
-        if MinRating > 0:
-            WhereConditions.append("Rating >= ?")
-            Parameters.append(MinRating)
-        
         WhereClause = " AND ".join(WhereConditions)
-        Query = f"SELECT COUNT(*) as ResultCount FROM Books WHERE {WhereClause}"
+        Query = f"""SELECT COUNT(*) as ResultCount 
+                   FROM Books B 
+                   LEFT JOIN Categories C ON B.CategoryId = C.Id 
+                   LEFT JOIN Subjects S ON B.SubjectId = S.Id 
+                   WHERE {WhereClause}"""
         
         Results = self.ExecuteQuery(Query, tuple(Parameters))
         return Results[0]['ResultCount'] if Results else 0
@@ -291,17 +295,13 @@ class DatabaseManager:
         Parameters = []
         
         if Category:
-            WhereConditions.append("Category = ?")
+            WhereConditions.append("C.Category = ?")
             Parameters.append(Category)
             
         if Subject:
-            WhereConditions.append("Subject = ?")
+            WhereConditions.append("S.Subject = ?")
             Parameters.append(Subject)
             
-        if MinRating > 0:
-            WhereConditions.append("Rating >= ?")
-            Parameters.append(MinRating)
-        
         # Build query
         if WhereConditions:
             WhereClause = "WHERE " + " AND ".join(WhereConditions)
@@ -309,11 +309,13 @@ class DatabaseManager:
             WhereClause = ""
         
         Query = f"""
-        SELECT Id, Title, Author, Category, Subject, Rating, 
-               PageCount, FileSize, FilePath, CreatedDate, ModifiedDate
-        FROM Books 
+        SELECT B.Id, B.Title, B.Author, C.Category, S.Subject, 
+               B.PageCount, B.FileSize, B.CreatedDate, B.ModifiedDate
+        FROM Books B
+        LEFT JOIN Categories C ON B.CategoryId = C.Id
+        LEFT JOIN Subjects S ON B.SubjectId = S.Id
         {WhereClause}
-        ORDER BY Title ASC
+        ORDER BY B.Title ASC
         LIMIT ? OFFSET ?
         """
         
@@ -329,23 +331,23 @@ class DatabaseManager:
         Parameters = []
         
         if Category:
-            WhereConditions.append("Category = ?")
+            WhereConditions.append("C.Category = ?")
             Parameters.append(Category)
             
         if Subject:
-            WhereConditions.append("Subject = ?")
+            WhereConditions.append("S.Subject = ?")
             Parameters.append(Subject)
             
-        if MinRating > 0:
-            WhereConditions.append("Rating >= ?")
-            Parameters.append(MinRating)
-        
         if WhereConditions:
             WhereClause = "WHERE " + " AND ".join(WhereConditions)
         else:
             WhereClause = ""
         
-        Query = f"SELECT COUNT(*) as FilteredCount FROM Books {WhereClause}"
+        Query = f"""SELECT COUNT(*) as FilteredCount 
+                   FROM Books B
+                   LEFT JOIN Categories C ON B.CategoryId = C.Id
+                   LEFT JOIN Subjects S ON B.SubjectId = S.Id
+                   {WhereClause}"""
         
         Results = self.ExecuteQuery(Query, tuple(Parameters))
         return Results[0]['FilteredCount'] if Results else 0
@@ -357,9 +359,8 @@ class DatabaseManager:
         Get all unique categories for dropdown population
         """
         Query = """
-        SELECT DISTINCT Category 
-        FROM Books 
-        WHERE Category IS NOT NULL AND Category != ''
+        SELECT Category 
+        FROM Categories 
         ORDER BY Category ASC
         """
         return self.ExecuteQuery(Query)
@@ -369,11 +370,11 @@ class DatabaseManager:
         Get categories with book counts for enhanced UI
         """
         Query = """
-        SELECT Category, COUNT(*) as BookCount
-        FROM Books 
-        WHERE Category IS NOT NULL AND Category != ''
-        GROUP BY Category 
-        ORDER BY BookCount DESC, Category ASC
+        SELECT C.Category, COUNT(B.Id) as BookCount
+        FROM Categories C
+        JOIN Books B ON C.Id = B.CategoryId
+        GROUP BY C.Category
+        ORDER BY BookCount DESC, C.Category ASC
         """
         return self.ExecuteQuery(Query)
 
@@ -382,9 +383,8 @@ class DatabaseManager:
         Get all unique subjects for dropdown population
         """
         Query = """
-        SELECT DISTINCT Subject 
-        FROM Books 
-        WHERE Subject IS NOT NULL AND Subject != ''
+        SELECT Subject 
+        FROM Subjects 
         ORDER BY Subject ASC
         """
         return self.ExecuteQuery(Query)
@@ -394,11 +394,11 @@ class DatabaseManager:
         Get subjects with book counts for enhanced UI
         """
         Query = """
-        SELECT Subject, COUNT(*) as BookCount
-        FROM Books 
-        WHERE Subject IS NOT NULL AND Subject != ''
-        GROUP BY Subject 
-        ORDER BY BookCount DESC, Subject ASC
+        SELECT S.Subject, COUNT(B.Id) as BookCount
+        FROM Subjects S
+        JOIN Books B ON S.Id = B.SubjectId
+        GROUP BY S.Subject 
+        ORDER BY BookCount DESC, S.Subject ASC
         """
         return self.ExecuteQuery(Query)
 
@@ -407,11 +407,13 @@ class DatabaseManager:
         Get subjects filtered by category for dependent dropdowns
         """
         Query = """
-        SELECT Subject, Category, COUNT(*) as BookCount
-        FROM Books 
-        WHERE Category = ? AND Subject IS NOT NULL AND Subject != ''
-        GROUP BY Subject, Category
-        ORDER BY Subject ASC
+        SELECT S.Subject, C.Category, COUNT(B.Id) as BookCount
+        FROM Subjects S
+        JOIN Books B ON S.Id = B.SubjectId
+        JOIN Categories C ON S.CategoryId = C.Id
+        WHERE C.Category = ?
+        GROUP BY S.Subject, C.Category
+        ORDER BY S.Subject ASC
         """
         return self.ExecuteQuery(Query, (Category,))
 
@@ -444,20 +446,12 @@ class DatabaseManager:
             Stats['TotalBooks'] = BookCountResult[0]['Total'] if BookCountResult else 0
             
             # Category count
-            CategoryCountQuery = """
-            SELECT COUNT(DISTINCT Category) as Total 
-            FROM Books 
-            WHERE Category IS NOT NULL AND Category != ''
-            """
+            CategoryCountQuery = "SELECT COUNT(*) as Total FROM Categories"
             CategoryCountResult = self.ExecuteQuery(CategoryCountQuery)
             Stats['TotalCategories'] = CategoryCountResult[0]['Total'] if CategoryCountResult else 0
             
             # Subject count
-            SubjectCountQuery = """
-            SELECT COUNT(DISTINCT Subject) as Total 
-            FROM Books 
-            WHERE Subject IS NOT NULL AND Subject != ''
-            """
+            SubjectCountQuery = "SELECT COUNT(*) as Total FROM Subjects"
             SubjectCountResult = self.ExecuteQuery(SubjectCountQuery)
             Stats['TotalSubjects'] = SubjectCountResult[0]['Total'] if SubjectCountResult else 0
             
@@ -486,21 +480,9 @@ class DatabaseManager:
                 Stats['TotalFileSize'] = 0
                 Stats['AverageFileSize'] = 0
             
-            # Rating statistics
-            RatingQuery = """
-            SELECT 
-                COALESCE(AVG(CAST(Rating as FLOAT)), 0.0) as AverageRating,
-                COUNT(*) as RatedBooks
-            FROM Books 
-            WHERE Rating IS NOT NULL AND Rating > 0
-            """
-            RatingResult = self.ExecuteQuery(RatingQuery)
-            if RatingResult:
-                Stats['AverageRating'] = round(RatingResult[0]['AverageRating'], 2)
-                Stats['RatedBooks'] = RatingResult[0]['RatedBooks']
-            else:
-                Stats['AverageRating'] = 0.0
-                Stats['RatedBooks'] = 0
+            # Rating statistics (REMOVED as column does not exist)
+            Stats['AverageRating'] = 0.0
+            Stats['RatedBooks'] = 0
             
             # Page count statistics
             PageQuery = """
@@ -541,10 +523,12 @@ class DatabaseManager:
         Get recently added books for mobile quick access
         """
         Query = """
-        SELECT Id, Title, Author, Category, Subject, Rating, CreatedDate
-        FROM Books 
-        WHERE CreatedDate IS NOT NULL
-        ORDER BY CreatedDate DESC
+        SELECT B.Id, B.Title, B.Author, C.Category, S.Subject, B.CreatedDate
+        FROM Books B
+        LEFT JOIN Categories C ON B.CategoryId = C.Id
+        LEFT JOIN Subjects S ON B.SubjectId = S.Id
+        WHERE B.CreatedDate IS NOT NULL
+        ORDER BY B.CreatedDate DESC
         LIMIT ?
         """
         return self.ExecuteQuery(Query, (Limit,))
@@ -554,10 +538,11 @@ class DatabaseManager:
         Get highest rated books for featured sections
         """
         Query = """
-        SELECT Id, Title, Author, Category, Subject, Rating
-        FROM Books 
-        WHERE Rating IS NOT NULL AND Rating >= 4
-        ORDER BY Rating DESC, Title ASC
+        SELECT B.Id, B.Title, B.Author, C.Category, S.Subject
+        FROM Books B 
+        LEFT JOIN Categories C ON B.CategoryId = C.Id
+        LEFT JOIN Subjects S ON B.SubjectId = S.Id
+        ORDER BY B.Title ASC
         LIMIT ?
         """
         return self.ExecuteQuery(Query, (Limit,))

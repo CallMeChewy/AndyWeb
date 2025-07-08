@@ -614,230 +614,456 @@ class DesktopLibraryInterface {
         this.selectedBook = null;
         this.currentBooks = [];
         this.cleanupFunctions = [];
-        
-        this.initializeDesktopInterface();
+        this.currentCategory = '';
+        this.currentSubject = '';
+        this.searchTimeout = null;
+        this.apiServerRunning = false;
+
+        this.initializeApp();
     }
-    
-    async initializeDesktopInterface() {
+
+    async initializeApp() {
         try {
+            this.updateStatus('Initializing Anderson\'s Library...');
+
+            // Check if API server is running
+            const serverRunning = await this.checkAPIServer();
+
+            if (!serverRunning) {
+                this.updateStatus('API server not available');
+                this.showAPIWarning();
+                return;
+            }
+
+            // Show About box initially
+            this.showAboutBox();
+
             // Load initial data
-            await this.loadInitialData();
-            
-            // Setup instant search
-            const searchInput = document.getElementById('searchInput');
-            if (searchInput) {
-                const cleanup = this.api.createInstantSearch(searchInput, (results) => {
-                    this.displayBooks(results.books);
-                    this.updateBookCount(results.total, results.message);
-                });
-                this.cleanupFunctions.push(cleanup);
-            }
-            
-            // Setup API event listeners
-            this.setupEventListeners();
-            
-            // Setup periodic cache cleanup
-            setInterval(() => this.api.cleanExpiredCache(), 60000); // Every minute
-            
-            console.log('Desktop interface initialized');
-            
-        } catch (error) {
-            console.error('Desktop interface initialization failed:', error);
-            this.showError('Failed to initialize library interface');
-        }
-    }
-    
-    async loadInitialData() {
-        try {
-            // Load books
-            const booksData = await this.api.getAllBooks();
-            this.displayBooks(booksData.books);
-            
-            // Load filter options
-            const [categories, subjects, stats] = await Promise.all([
-                this.api.getCategories(),
-                this.api.getSubjects(),
-                this.api.getLibraryStats()
+            await Promise.all([
+                this.loadCategories(),
+                this.loadStats()
             ]);
-            
-            this.populateCategoryDropdown(categories);
-            this.populateSubjectDropdown(subjects);
-            this.updateStatistics(stats);
-            
+
+            // Show about box initially, books will load on search/filter
+            this.showAboutBox();
+
+            this.updateStatus('Ready');
+            this.setupEventListeners();
+
         } catch (error) {
-            console.error('Failed to load initial data:', error);
-            this.showError('Failed to load library data');
+            console.error('Initialization failed:', error);
+            this.updateStatus('Failed to initialize application');
+            this.showAboutBox(); // Show about box if initialization fails
         }
     }
-    
-    setupEventListeners() {
-        // Loading state management
-        this.api.on('loadingStart', (data) => {
-            this.showLoading(true, `Loading ${data.operation}...`);
-        });
-        
-        this.api.on('loadingEnd', (data) => {
-            this.showLoading(false);
-        });
-        
-        // Error handling
-        this.api.on('error', (data) => {
-            this.showError(`Error in ${data.operation}: ${data.error}`);
-        });
+
+    async checkAPIServer() {
+        try {
+            const stats = await this.api.getLibraryStats();
+            this.apiServerRunning = stats && stats.total_books !== undefined;
+            return this.apiServerRunning;
+        } catch (error) {
+            console.warn('API server not accessible:', error);
+            this.apiServerRunning = false;
+            return false;
+        }
     }
-    
-    displayBooks(books) {
-        const grid = document.getElementById('bookGrid');
+
+    showAPIWarning() {
+        const grid = document.getElementById('booksGrid');
         if (!grid) return;
-        
-        grid.innerHTML = '';
-        
-        books.forEach(book => {
-            const bookCard = this.createBookCard(book);
-            grid.appendChild(bookCard);
-        });
-        
-        this.currentBooks = books;
-        
-        // Load thumbnails asynchronously
-        this.loadThumbnailsForBooks(books);
-    }
-    
-    async loadThumbnailsForBooks(books) {
-        const bookIds = books.map(book => book.id);
-        const thumbnails = await this.api.loadThumbnailsBatch(bookIds);
-        
-        thumbnails.forEach(({ bookId, thumbnail, success }) => {
-            if (success && thumbnail) {
-                const bookCard = document.querySelector(`[data-book-id="${bookId}"]`);
-                if (bookCard) {
-                    const coverElement = bookCard.querySelector('.book-cover');
-                    if (coverElement) {
-                        coverElement.innerHTML = `<img src="${thumbnail}" alt="Book cover" loading="lazy">`;
-                    }
-                }
-            }
-        });
-    }
-    
-    createBookCard(book) {
-        const card = document.createElement('div');
-        card.className = 'book-card';
-        card.onclick = () => this.selectBook(card, book);
-        card.dataset.bookId = book.id;
-        
-        card.innerHTML = `
-            <div class="book-cover">📘</div>
-            <div class="book-title">${this.escapeHtml(book.title)}</div>
-            <div class="book-author">${this.escapeHtml(book.author || 'Unknown Author')}</div>
-            <div class="book-category">${this.escapeHtml(book.category || 'Uncategorized')}</div>
+        grid.innerHTML = `
+            <div class="api-warning">
+                <strong>⚠️ API Server Not Running</strong>
+                <p>Please start the FastAPI server to access your library:</p>
+                <code style="background: rgba(0,0,0,0.3); padding: 5px 10px; border-radius: 3px; display: inline-block; margin: 10px 0;">
+                    python StartAndyWeb.py
+                </code>
+                <p>Then visit: <strong>http://127.0.0.1:8001/app</strong></p>
+            </div>
         `;
-        
-        return card;
+
+        document.getElementById('bookCount').textContent = 'API Server Required';
+        document.getElementById('statusStats').textContent = 'Server offline';
     }
-    
-    selectBook(bookCard, book) {
+
+    setupEventListeners() {
+        // Search with debouncing
+        const searchInput = document.getElementById('searchInput');
+        if (searchInput) {
+            searchInput.value = ''; // Ensure search input is blank on load
+            searchInput.addEventListener('input', (e) => {
+                clearTimeout(this.searchTimeout);
+                this.searchTimeout = setTimeout(() => {
+                    this.performSearch();
+                }, 300);
+            });
+
+            searchInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    this.performSearch();
+                }
+            });
+        }
+    }
+
+    showAboutBox() {
+        const grid = document.getElementById('booksGrid');
+        if (!grid) return;
+        grid.innerHTML = `
+            <div class="about-box">
+                <div class="about-content">
+                    <div class="about-header">
+                        <h2>Anderson's Library</h2>
+                        <p class="subtitle">Professional Edition</p>
+                    </div>
+                    <div class="about-body">
+                        <div class="about-logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                        </div>
+                        <div class="about-logo-fallback" style="display: none;">📚</div>
+                        <p><strong>Another Intuitive Product</strong></p>
+                        <p>from the folks at</p>
+                        <p><strong>BowersWorld.com</strong></p>
+                        <div class="copyright">© 2025</div>
+                        <div class="version">Design Standard v2.0</div>
+                        <div class="project">Project Himalaya</div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.getElementById('bookCount').textContent = 'Welcome to Anderson\'s Library';
+    }
+
+    async loadCategories() {
+        try {
+            console.log('Loading categories from API');
+            const categories = await this.api.getCategories();
+            console.log('Categories response:', categories);
+            const sortedCategories = categories.sort((a, b) => a.name.localeCompare(b.name));
+
+            const categorySelect = document.getElementById('categorySelect');
+            if (!categorySelect) return;
+            categorySelect.innerHTML = '<option value="">All Categories</option>';
+
+            sortedCategories.forEach(category => {
+                const option = document.createElement('option');
+                option.value = category.name;
+                option.textContent = `${category.name} (${category.count})`;
+                categorySelect.appendChild(option);
+            });
+
+            console.log(`✅ Loaded ${categories.length} categories`);
+
+        } catch (error) {
+            console.error('Failed to load categories:', error);
+
+            // Show placeholder categories when server isn't available
+            const categorySelect = document.getElementById('categorySelect');
+            if (!categorySelect) return;
+            categorySelect.innerHTML = `
+                <option value="">All Categories</option>
+                <option value="Programming Languages">Programming Languages</option>
+                <option value="Reference">Reference</option>
+                <option value="Math">Math</option>
+                <option value="Business">Business</option>
+            `;
+
+            if (!this.apiServerRunning) {
+                categorySelect.disabled = true;
+                categorySelect.title = "Requires API server to be running";
+            }
+        }
+    }
+
+    async loadSubjects(categoryFilter = '') {
+        try {
+            const subjects = await this.api.getSubjects(categoryFilter);
+            const sortedSubjects = subjects.sort((a, b) => a.name.localeCompare(b.name));
+
+            const subjectSelect = document.getElementById('subjectSelect');
+            if (!subjectSelect) return;
+            subjectSelect.innerHTML = '<option value="">All Subjects</option>';
+
+            sortedSubjects.forEach(subject => {
+                const option = document.createElement('option');
+                option.value = subject.name;
+                option.textContent = `${subject.name} (${subject.count})`;
+                subjectSelect.appendChild(option);
+            });
+
+            console.log(`Loaded ${subjects.length} subjects`);
+
+        } catch (error) {
+            console.error('Failed to load subjects:', error);
+
+            // Show placeholder subjects when server isn't available
+            const subjectSelect = document.getElementById('subjectSelect');
+            if (!subjectSelect) return;
+            subjectSelect.innerHTML = `
+                <option value="">All Subjects</option>
+                <option value="Python">Python</option>
+                <option value="JavaScript">JavaScript</option>
+                <option value="Data Science">Data Science</option>
+                <option value="Web Development">Web Development</option>
+            `;
+
+            if (!this.apiServerRunning) {
+                subjectSelect.disabled = true;
+                subjectSelect.title = "Requires API server to be running";
+            }
+        }
+    }
+
+    async loadStats() {
+        try {
+            console.log('Loading stats from API');
+            const stats = await this.api.getLibraryStats();
+            console.log('Stats response:', stats);
+
+            const categoriesCount = stats.total_categories || stats.categories || 0;
+            const subjectsCount = stats.total_subjects || stats.subjects || 0;
+            const booksCount = stats.total_books || stats.books || 0;
+
+            document.getElementById('statusStats').textContent =
+                `${categoriesCount} Categories • ${subjectsCount} Subjects • ${booksCount} Total eBooks`;
+
+        } catch (error) {
+            console.error('Failed to load stats:', error);
+
+            // Show placeholder stats when server isn't available
+            if (!this.apiServerRunning) {
+                document.getElementById('statusStats').textContent = 'Server Required • Start python StartAndyWeb.py';
+            } else {
+                document.getElementById('statusStats').textContent = 'Stats unavailable';
+            }
+        }
+    }
+
+    async loadBooks(filters = {}) {
+        console.log('loadBooks: Received filters:', filters);
+        // Don't try to load books if API server isn't running
+        if (!this.apiServerRunning) {
+            this.showAPIWarning();
+            return;
+        }
+
+        try {
+            this.updateStatus('Loading books...');
+
+            let data;
+            if (filters.search) {
+                data = await this.api.searchBooks(filters.search);
+            } else {
+                data = await this.api.getBooksByFilters(filters.category, filters.subject);
+            }
+
+            this.currentBooks = data.books || [];
+
+            this.renderBooks(this.currentBooks);
+            this.updateBookCount(data.total || this.currentBooks.length, filters);
+            this.updateStatus('Ready');
+
+        } catch (error) {
+            console.error('Failed to load books:', error);
+            this.renderError(`Failed to load books: ${error.message}. Please ensure the API server is running and data is valid.`);
+            this.updateStatus('Error loading books');
+        }
+    }
+
+    renderBooks(books) {
+        const grid = document.getElementById('booksGrid');
+        if (!grid) return;
+
+        if (!books || books.length === 0) {
+            this.showAboutBox();
+            return;
+        }
+
+        grid.innerHTML = books.map(book => `
+            <div class="book-card" onclick="window.libraryInterface.selectBook(${JSON.stringify(book).replace(/'/g, "'")})">
+                <div class="book-thumbnail" id="thumb-${book.id}">
+                    <img src="${this.api.apiBase}/books/${book.id}/thumbnail"
+                         alt="${book.title}"
+                         onerror="handleThumbnailError(this, ${book.id})"
+                         onload="handleThumbnailLoad(this)">
+                </div>
+                <div class="book-info">
+                    <div class="book-title">${book.title || 'Unknown Title'}</div>
+                    <div class="book-author">${book.author || 'Unknown Author'}</div>
+                    <div class="book-category">${book.category || 'General'}</div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    handleThumbnailError(img, bookId) {
+        const container = img.parentElement;
+        container.className = 'book-thumbnail no-image';
+        container.innerHTML = '<div>No<br>Image</div>';
+    }
+
+    handleThumbnailLoad(img) {
+        img.style.opacity = '1';
+    }
+
+    renderError(message) {
+        const grid = document.getElementById('booksGrid');
+        if (!grid) return;
+        grid.innerHTML = `<div class="error">${message}</div>`;
+    }
+
+    async onCategoryChange() {
+        if (!this.apiServerRunning) {
+            this.updateStatus('Please start the API server to use filters');
+            return;
+        }
+
+        const categorySelect = document.getElementById('categorySelect');
+        if (!categorySelect) return;
+        this.currentCategory = categorySelect.value;
+
+        // Reset subject dropdown
+        this.currentSubject = '';
+        const subjectSelect = document.getElementById('subjectSelect');
+        if (subjectSelect) subjectSelect.value = '';
+
+        // Load subjects for this category
+        await this.loadSubjects(this.currentCategory);
+
+        // Reload books
+        console.log('onCategoryChange: Calling loadBooks with filters:', {
+            category: this.currentCategory,
+            subject: this.currentSubject,
+            search: document.getElementById('searchInput').value
+        });
+        await this.loadBooks({
+            category: this.currentCategory,
+            subject: this.currentSubject,
+            search: document.getElementById('searchInput').value
+        });
+    }
+
+    async onSubjectChange() {
+        if (!this.apiServerRunning) {
+            this.updateStatus('Please start the API server to use filters');
+            return;
+        }
+
+        const subjectSelect = document.getElementById('subjectSelect');
+        if (!subjectSelect) return;
+        this.currentSubject = subjectSelect.value;
+
+        // Reload books
+        console.log('onSubjectChange: Calling loadBooks with filters:', {
+            category: this.currentCategory,
+            subject: this.currentSubject,
+            search: document.getElementById('searchInput').value
+        });
+        await this.loadBooks({
+            category: this.currentCategory,
+            subject: this.currentSubject,
+            search: document.getElementById('searchInput').value
+        });
+    }
+
+    async performSearch() {
+        if (!this.apiServerRunning) {
+            this.updateStatus('Please start the API server to search books');
+            this.showAPIWarning();
+            return;
+        }
+
+        const searchInput = document.getElementById('searchInput');
+        const searchTerm = searchInput ? searchInput.value : '';
+
+        console.log('performSearch: Calling loadBooks with filters:', {
+            category: this.currentCategory,
+            subject: this.currentSubject,
+            search: searchTerm
+        });
+        await this.loadBooks({
+            category: this.currentCategory,
+            subject: this.currentSubject,
+            search: searchTerm
+        });
+    }
+
+    selectBook(book) {
         // Remove previous selection
         if (this.selectedBook) {
-            this.selectedBook.classList.remove('selected');
+            const prevSelectedCard = document.querySelector(`[data-book-id="${this.selectedBook.id}"]`);
+            if (prevSelectedCard) {
+                prevSelectedCard.classList.remove('selected');
+            }
         }
-        
+
         // Select new book
-        this.selectedBook = bookCard;
-        bookCard.classList.add('selected');
-        
+        const newSelectedCard = document.querySelector(`[data-book-id="${book.id}"]`);
+        if (newSelectedCard) {
+            this.selectedBook = book;
+            newSelectedCard.classList.add('selected');
+        }
+
         // Update status
         this.updateStatus(`Selected: ${book.title}`);
-        
+
         console.log('Book selected:', book);
     }
-    
-    populateCategoryDropdown(categories) {
-        const select = document.getElementById('categoryFilter');
-        if (!select) return;
-        
-        // Clear existing options except first
-        while (select.children.length > 1) {
-            select.removeChild(select.lastChild);
+
+    updateBookCount(count, filters = {}) {
+        let context = '';
+        const filterParts = [];
+
+        if (filters.category) filterParts.push(`Category: ${filters.category}`);
+        if (filters.subject) filterParts.push(`Subject: ${filters.subject}`);
+        if (filters.search) filterParts.push(`Search: "${filters.search}"`);
+
+        if (filterParts.length > 0) {
+            context = ` (${filterParts.join(', ')})`;
         }
-        
-        categories.forEach(category => {
-            const option = document.createElement('option');
-            option.value = category.name || category;
-            option.textContent = category.name || category;
-            select.appendChild(option);
-        });
-    }
-    
-    populateSubjectDropdown(subjects) {
-        const select = document.getElementById('subjectFilter');
-        if (!select) return;
-        
-        // Clear existing options except first
-        while (select.children.length > 1) {
-            select.removeChild(select.lastChild);
-        }
-        
-        subjects.forEach(subject => {
-            const option = document.createElement('option');
-            option.value = subject.name || subject;
-            option.textContent = subject.name || subject;
-            select.appendChild(option);
-        });
-    }
-    
-    updateBookCount(count, message = '') {
-        const bookCount = document.getElementById('bookCount');
-        if (bookCount) {
-            const contextText = message ? ` (${message})` : '';
-            bookCount.textContent = `Showing ${count} books${contextText}`;
+
+        const bookCountElement = document.getElementById('bookCount');
+        if (bookCountElement) {
+            bookCountElement.textContent = `Showing ${count} books${context}`;
         }
     }
-    
-    updateStatistics(stats) {
-        const statsDisplay = document.getElementById('statsDisplay');
-        if (statsDisplay) {
-            statsDisplay.textContent = `📚 ${stats.total_books} books • 🏷️ ${stats.total_categories} categories • 📑 ${stats.total_subjects} subjects`;
-        }
-    }
-    
+
     updateStatus(message) {
-        const statusElement = document.getElementById('statusMessage');
-        if (statusElement) {
-            statusElement.textContent = message;
+        const statusMessageElement = document.getElementById('statusMessage');
+        if (statusMessageElement) {
+            statusMessageElement.textContent = message;
         }
     }
-    
-    showLoading(show, message = 'Loading...') {
-        const loading = document.getElementById('loadingIndicator');
-        const progress = document.getElementById('progressBar');
-        
-        if (loading) {
-            loading.style.display = show ? 'block' : 'none';
-            loading.textContent = message;
+
+    setViewMode(mode) {
+        const buttons = document.querySelectorAll('.view-mode-btn');
+        buttons.forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.mode === mode);
+        });
+
+        const booksGrid = document.getElementById('booksGrid');
+        if (!booksGrid) return;
+        if (mode === 'grid') {
+            booksGrid.classList.remove('books-list');
+            booksGrid.classList.add('books-grid');
+        } else {
+            booksGrid.classList.remove('books-grid');
+            booksGrid.classList.add('books-list');
         }
-        
-        if (progress) {
-            progress.style.display = show ? 'block' : 'none';
-        }
+
+        this.updateStatus(`View mode: ${mode}`);
     }
-    
-    showError(message) {
-        console.error('Desktop Interface Error:', message);
-        this.updateStatus(`Error: ${message}`);
-        
-        // Could show a more prominent error UI here
-        setTimeout(() => {
-            this.updateStatus('Ready');
-        }, 5000);
+
+    toggleViewMode() {
+        const booksGrid = document.getElementById('booksGrid');
+        if (!booksGrid) return;
+        const currentMode = booksGrid.classList.contains('books-grid') ? 'grid' : 'list';
+        const newMode = currentMode === 'grid' ? 'list' : 'grid';
+        this.setViewMode(newMode);
     }
-    
-    escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
-    
+
+    // Original cleanup function, kept for completeness
     cleanup() {
         this.cleanupFunctions.forEach(cleanup => cleanup());
         this.api.clearCache();
@@ -854,22 +1080,22 @@ class MobileLibraryInterface {
         this.selectedBook = null;
         this.currentBooks = [];
         this.cleanupFunctions = [];
-        
+
         this.initializeMobileInterface();
     }
-    
+
     async initializeMobileInterface() {
         try {
             // Load initial data
             await this.loadInitialData();
-            
+
             // Setup mobile search
             const searchInput = document.getElementById('mobileSearchInput');
             if (searchInput) {
                 const cleanup = this.api.createInstantSearch(searchInput, (results) => {
                     this.displayMobileBooks(results.books);
                     this.updateMobileStats(results.total);
-                    
+
                     if (results.books.length === 0) {
                         this.showEmptyState(true);
                     } else {
@@ -878,67 +1104,71 @@ class MobileLibraryInterface {
                 });
                 this.cleanupFunctions.push(cleanup);
             }
-            
+
             // Setup API event listeners
             this.setupMobileEventListeners();
-            
+
             // Prefetch for offline use
             this.api.prefetchForOffline();
-            
+
             console.log('Mobile interface initialized');
-            
+
         } catch (error) {
             console.error('Mobile interface initialization failed:', error);
             this.showErrorToast('Failed to initialize library');
         }
     }
-    
+
     async loadInitialData() {
         try {
-            const booksData = await this.api.getAllBooks(1, 30); // Smaller initial load for mobile
-            this.displayMobileBooks(booksData.books);
-            this.updateMobileStats(booksData.total);
-            
+            // Load books
+            await this.loadBooks();
+
+            // Load filter options
+            await this.loadCategories();
+            await this.loadSubjects();
+            await this.loadStats();
+
         } catch (error) {
-            console.error('Failed to load initial mobile data:', error);
-            this.showErrorToast('Failed to load library data');
+            console.error('Failed to load initial data:', error);
+            this.renderError('Failed to load library data');
         }
     }
-    
+
     setupMobileEventListeners() {
         this.api.on('loadingStart', (data) => {
             this.showMobileLoading(true);
         });
-        
+
         this.api.on('loadingEnd', (data) => {
             this.showMobileLoading(false);
         });
-        
+
         this.api.on('error', (data) => {
             this.showErrorToast(`Error: ${data.error}`);
         });
     }
-    
+
     displayMobileBooks(books) {
         const list = document.getElementById('mobileBookList');
         if (!list) return;
-        
+
         list.innerHTML = '';
-        
+
         books.forEach(book => {
             const card = this.createMobileBookCard(book);
             list.appendChild(card);
         });
-        
+
         this.currentBooks = books;
     }
-    
+
     createMobileBookCard(book) {
         const card = document.createElement('div');
-        card.className = 'mobile-book-card';
-        card.onclick = () => this.selectMobileBook(card, book);
+        card.className = 'book-card';
+        card.onclick = () => this.selectBook(book);
         card.dataset.bookId = book.id;
-        
+
         card.innerHTML = `
             <div class="mobile-book-cover">📘</div>
             <div class="mobile-book-info">
@@ -951,47 +1181,50 @@ class MobileLibraryInterface {
             </div>
             <div class="mobile-book-arrow">›</div>
         `;
-        
+
         return card;
     }
-    
-    selectMobileBook(bookCard, book) {
-        // Haptic feedback
-        if (navigator.vibrate) {
-            navigator.vibrate(50);
-        }
-        
+
+    selectBook(book) {
         // Remove previous selection
         if (this.selectedBook) {
-            this.selectedBook.classList.remove('selected');
+            const prevSelectedCard = document.querySelector(`[data-book-id="${this.selectedBook.id}"]`);
+            if (prevSelectedCard) {
+                prevSelectedCard.classList.remove('selected');
+            }
         }
-        
+
         // Select new book
-        this.selectedBook = bookCard;
-        bookCard.classList.add('selected');
-        
-        console.log('Mobile book selected:', book);
-        this.showErrorToast(`Selected: ${book.title}`);
+        const newSelectedCard = document.querySelector(`[data-book-id="${book.id}"]`);
+        if (newSelectedCard) {
+            this.selectedBook = book;
+            newSelectedCard.classList.add('selected');
+        }
+
+        // Update status
+        this.updateStatus(`Selected: ${book.title}`);
+
+        console.log('Book selected:', book);
     }
-    
+
     updateMobileStats(totalBooks) {
         const element = document.getElementById('totalBooks');
         if (element) {
             element.textContent = totalBooks;
         }
     }
-    
+
     showMobileLoading(show) {
         const loading = document.getElementById('mobileLoading');
         if (loading) {
             loading.style.display = show ? 'flex' : 'none';
         }
     }
-    
+
     showEmptyState(show) {
         const emptyState = document.getElementById('emptyState');
         const bookList = document.getElementById('mobileBookList');
-        
+
         if (emptyState && bookList) {
             if (show) {
                 emptyState.style.display = 'flex';
@@ -1002,25 +1235,25 @@ class MobileLibraryInterface {
             }
         }
     }
-    
+
     showErrorToast(message) {
         const toast = document.getElementById('errorToast');
         if (toast) {
             toast.textContent = message;
             toast.classList.add('show');
-            
+
             setTimeout(() => {
                 toast.classList.remove('show');
             }, 3000);
         }
     }
-    
+
     escapeHtml(text) {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
     }
-    
+
     cleanup() {
         this.cleanupFunctions.forEach(cleanup => cleanup());
         this.api.clearCache();
@@ -1029,32 +1262,7 @@ class MobileLibraryInterface {
 
 // ==================== AUTO-INITIALIZATION ====================
 
-/**
- * Automatically initialize the appropriate interface based on device/viewport
- * Follows progressive enhancement principles
- */
-document.addEventListener('DOMContentLoaded', function() {
-    // Detect mobile vs desktop
-    const isMobile = window.innerWidth <= 768 || 'ontouchstart' in window;
-    const hasDesktopElements = document.getElementById('bookGrid');
-    const hasMobileElements = document.getElementById('mobileBookList');
-    
-    // Initialize appropriate interface
-    if (isMobile && hasMobileElements) {
-        window.libraryInterface = new MobileLibraryInterface();
-        console.log('Mobile library interface activated');
-    } else if (hasDesktopElements) {
-        window.libraryInterface = new DesktopLibraryInterface();
-        console.log('Desktop library interface activated');
-    }
-    
-    // Cleanup on page unload
-    window.addEventListener('beforeunload', function() {
-        if (window.libraryInterface && window.libraryInterface.cleanup) {
-            window.libraryInterface.cleanup();
-        }
-    });
-});
+
 
 // Export for use in other modules
 if (typeof module !== 'undefined' && module.exports) {
