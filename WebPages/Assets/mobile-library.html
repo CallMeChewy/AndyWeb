@@ -1,0 +1,1274 @@
+<!-- 
+File: mobile-library.html
+Path: WebPages/mobile-library.html
+Standard: AIDEV-PascalCase-2.0
+Ecosystem Requirement: Lowercase filename for mobile web hosting and PWA compatibility
+Framework: Progressive Web App (PWA) / Mobile-first responsive design
+CSS Classes: kebab-case for mobile framework compatibility and touch interfaces
+JavaScript: camelCase per mobile web ecosystem standards
+PWA Requirements: Service worker ready, mobile viewport optimized
+Touch Optimization: Touch-friendly targets (44px minimum), haptic feedback
+Created: 2025-07-07
+Last Modified: 2025-07-07  09:10PM
+Description: Mobile Library App - Touch-optimized Anderson's Library
+Native app feel with Progressive Web App features and mobile-first design
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Anderson's Library">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#03324c">
+    <meta name="description" content="Anderson's Library - Mobile Application">
+    <meta name="author" content="Herb Bowers - Project Himalaya">
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/assets/icon-192.png">
+    
+    <title>Anderson's Library</title>
+    <style>
+        /* Mobile-First Reset and Base Styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+        }
+
+        /* Allow text selection for specific elements */
+        .mobile-book-title,
+        .mobile-book-author,
+        .search-input-mobile {
+            -webkit-user-select: text;
+            -moz-user-select: text;
+            -ms-user-select: text;
+            user-select: text;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #03324c 0%, #0875b2 50%, #03334d 100%);
+            color: #ffffff;
+            height: 100vh;
+            overflow: hidden;
+            overscroll-behavior: none;
+            touch-action: manipulation;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* Mobile App Container */
+        .mobile-app {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            position: relative;
+        }
+
+        /* Mobile Header */
+        .mobile-header {
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            padding: max(env(safe-area-inset-top), 20px) 16px 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .app-title {
+            font-size: 20px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            letter-spacing: -0.5px;
+        }
+
+        .menu-btn, 
+        .profile-btn {
+            width: 44px;
+            height: 44px;
+            border: none;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            touch-action: manipulation;
+        }
+
+        .menu-btn:active, 
+        .profile-btn:active {
+            background: rgba(255, 255, 255, 0.2);
+            transform: scale(0.95);
+        }
+
+        /* Mobile Search */
+        .mobile-search {
+            position: relative;
+        }
+
+        .search-input-mobile {
+            width: 100%;
+            padding: 14px 20px 14px 48px;
+            border: none;
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            color: white;
+            font-size: 16px;
+            outline: none;
+        }
+
+        .search-input-mobile::placeholder {
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .search-input-mobile:focus {
+            background: rgba(255, 255, 255, 0.2);
+            box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 18px;
+            color: rgba(255, 255, 255, 0.7);
+            pointer-events: none;
+        }
+
+        .clear-search {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 28px;
+            height: 28px;
+            border: none;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border-radius: 50%;
+            font-size: 14px;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            touch-action: manipulation;
+        }
+
+        .clear-search:active {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-50%) scale(0.9);
+        }
+
+        /* Stats Bar */
+        .stats-bar {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 12px 16px;
+            display: flex;
+            justify-content: space-around;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .stat-item {
+            text-align: center;
+            flex: 1;
+        }
+
+        .stat-number {
+            font-size: 24px;
+            font-weight: 700;
+            color: #4da6ff;
+            display: block;
+            line-height: 1;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.8);
+            margin-top: 2px;
+        }
+
+        /* Mobile Content */
+        .mobile-content {
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Book List - Mobile Optimized */
+        .mobile-book-list {
+            height: 100%;
+            overflow-y: auto;
+            overflow-x: hidden;
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior-y: contain;
+            padding: 16px;
+            scroll-behavior: smooth;
+        }
+
+        .mobile-book-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 16px;
+            margin-bottom: 16px;
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+            position: relative;
+            overflow: hidden;
+            touch-action: manipulation;
+            min-height: 88px; /* Minimum touch target */
+        }
+
+        .mobile-book-card:active {
+            transform: scale(0.98);
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .mobile-book-card.selected {
+            border-color: #4da6ff;
+            background: rgba(77, 166, 255, 0.2);
+        }
+
+        /* Book Cover - Mobile */
+        .mobile-book-cover {
+            width: 80px;
+            height: 100px;
+            background: linear-gradient(135deg, #333, #555);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            flex-shrink: 0;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .mobile-book-cover img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 8px;
+        }
+
+        /* Book Info - Mobile */
+        .mobile-book-info {
+            flex: 1;
+            min-width: 0; /* For text truncation */
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .mobile-book-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 4px;
+            line-height: 1.3;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            word-break: break-word;
+        }
+
+        .mobile-book-author {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.8);
+            margin-bottom: 8px;
+            display: -webkit-box;
+            -webkit-line-clamp: 1;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .mobile-book-meta {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .mobile-category-tag {
+            background: rgba(77, 166, 255, 0.3);
+            color: #4da6ff;
+            padding: 4px 8px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+
+        .mobile-rating {
+            font-size: 14px;
+            white-space: nowrap;
+        }
+
+        .mobile-book-arrow {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 18px;
+            margin-left: 8px;
+            flex-shrink: 0;
+        }
+
+        /* Filter Drawer */
+        .filter-drawer {
+            position: fixed;
+            top: 0;
+            left: -100%;
+            width: 85%;
+            max-width: 320px;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.95);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            z-index: 200;
+            transition: left 0.3s ease;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .filter-drawer.open {
+            left: 0;
+        }
+
+        .drawer-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 199;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .drawer-overlay.open {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .drawer-header {
+            padding: max(env(safe-area-inset-top), 20px) 20px 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .drawer-title {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .close-drawer {
+            width: 36px;
+            height: 36px;
+            border: none;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            touch-action: manipulation;
+        }
+
+        .close-drawer:active {
+            background: rgba(255, 255, 255, 0.2);
+            transform: scale(0.9);
+        }
+
+        .drawer-content {
+            padding: 20px;
+        }
+
+        .filter-section {
+            margin-bottom: 24px;
+        }
+
+        .filter-section h3 {
+            font-size: 16px;
+            margin-bottom: 12px;
+            color: #4da6ff;
+            font-weight: 600;
+        }
+
+        .mobile-filter-select {
+            width: 100%;
+            padding: 12px 16px;
+            border: none;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            font-size: 16px;
+            margin-bottom: 12px;
+            appearance: none;
+            -webkit-appearance: none;
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='white' viewBox='0 0 16 16'%3e%3cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            background-size: 16px;
+        }
+
+        .mobile-filter-select:focus {
+            outline: none;
+            background: rgba(255, 255, 255, 0.2);
+            box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3);
+        }
+
+        .mobile-filter-select option {
+            background: #2a2a2a;
+            color: white;
+        }
+
+        /* Quick Actions */
+        .quick-actions {
+            display: flex;
+            gap: 12px;
+            padding: 16px;
+            background: rgba(0, 0, 0, 0.2);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: max(env(safe-area-inset-bottom), 16px);
+        }
+
+        .quick-action-btn {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 12px;
+            background: rgba(77, 166, 255, 0.2);
+            color: #4da6ff;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            touch-action: manipulation;
+            min-height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .quick-action-btn:active {
+            background: rgba(77, 166, 255, 0.3);
+            transform: scale(0.95);
+        }
+
+        /* Pull to Refresh */
+        .pull-refresh {
+            position: absolute;
+            top: -60px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(77, 166, 255, 0.2);
+            color: #4da6ff;
+            padding: 12px 20px;
+            border-radius: 20px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            z-index: 10;
+            white-space: nowrap;
+        }
+
+        .pull-refresh.visible {
+            top: 20px;
+        }
+
+        .pull-refresh.active {
+            background: rgba(77, 166, 255, 0.4);
+            transform: translateX(-50%) scale(1.1);
+        }
+
+        /* Loading Spinner */
+        .mobile-loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            z-index: 150;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+
+        .spinner {
+            width: 32px;
+            height: 32px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-top: 3px solid #4da6ff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 12px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Empty State */
+        .empty-state {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+            text-align: center;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+
+        .empty-state-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .empty-state-description {
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        /* Error Toast */
+        .error-toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 59, 48, 0.9);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 12px;
+            font-size: 14px;
+            z-index: 300;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+
+        .error-toast.show {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        /* Safe Area Support */
+        .mobile-content {
+            padding-bottom: max(env(safe-area-inset-bottom), 0px);
+        }
+
+        /* Dark Mode Enhancements */
+        @media (prefers-color-scheme: dark) {
+            .mobile-book-card {
+                background: rgba(255, 255, 255, 0.05);
+            }
+            
+            .search-input-mobile {
+                background: rgba(255, 255, 255, 0.1);
+            }
+        }
+
+        /* Reduced Motion Support */
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+
+        /* High Contrast Support */
+        @media (prefers-contrast: high) {
+            .mobile-book-card {
+                border: 1px solid rgba(255, 255, 255, 0.3);
+            }
+            
+            .mobile-category-tag {
+                border: 1px solid #4da6ff;
+            }
+        }
+
+        /* Large Text Support */
+        @media (prefers-font-size: large) {
+            .mobile-book-title {
+                font-size: 18px;
+            }
+            
+            .mobile-book-author {
+                font-size: 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="mobile-app">
+        <!-- Mobile Header -->
+        <div class="mobile-header">
+            <div class="header-top">
+                <button class="menu-btn" onclick="toggleFilterDrawer()" aria-label="Open filters menu">☰</button>
+                <div class="app-title">
+                    📚 Library
+                </div>
+                <button class="profile-btn" onclick="showProfile()" aria-label="User profile">👤</button>
+            </div>
+
+            <!-- Mobile Search -->
+            <div class="mobile-search">
+                <div class="search-icon">🔍</div>
+                <input type="text" 
+                       class="search-input-mobile" 
+                       placeholder="Search books, authors, or topics" 
+                       id="mobileSearchInput"
+                       autocomplete="off"
+                       autocorrect="off"
+                       autocapitalize="off"
+                       spellcheck="false">
+                <button class="clear-search" onclick="clearMobileSearch()" id="clearSearchBtn" aria-label="Clear search">×</button>
+            </div>
+        </div>
+
+        <!-- Stats Bar -->
+        <div class="stats-bar">
+            <div class="stat-item">
+                <span class="stat-number" id="totalBooks">1219</span>
+                <div class="stat-label">Books</div>
+            </div>
+            <div class="stat-item">
+                <span class="stat-number" id="totalCategories">26</span>
+                <div class="stat-label">Categories</div>
+            </div>
+            <div class="stat-item">
+                <span class="stat-number" id="totalSubjects">118</span>
+                <div class="stat-label">Subjects</div>
+            </div>
+        </div>
+
+        <!-- Mobile Content -->
+        <div class="mobile-content">
+            <!-- Pull to Refresh -->
+            <div class="pull-refresh" id="pullRefresh">🔄 Pull to refresh</div>
+
+            <!-- Book List -->
+            <div class="mobile-book-list" id="mobileBookList">
+                <!-- Books will be loaded by JavaScript -->
+            </div>
+
+            <!-- Empty State -->
+            <div class="empty-state" id="emptyState">
+                <div class="empty-state-icon">📚</div>
+                <div class="empty-state-title">No books found</div>
+                <div class="empty-state-description">Try adjusting your search or filters</div>
+            </div>
+
+            <!-- Loading Indicator -->
+            <div class="mobile-loading" id="mobileLoading" style="display: none;">
+                <div class="spinner"></div>
+                <div>Loading books...</div>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="quick-actions">
+            <button class="quick-action-btn" onclick="showRandomBook()" aria-label="Show random book">
+                🎲 Random
+            </button>
+            <button class="quick-action-btn" onclick="showRecentBooks()" aria-label="Show recent books">
+                📖 Recent
+            </button>
+            <button class="quick-action-btn" onclick="showFavoriteBooks()" aria-label="Show favorite books">
+                ❤️ Favorites
+            </button>
+        </div>
+
+        <!-- Filter Drawer -->
+        <div class="filter-drawer" id="filterDrawer">
+            <div class="drawer-header">
+                <div class="drawer-title">Filters</div>
+                <button class="close-drawer" onclick="toggleFilterDrawer()" aria-label="Close filters">×</button>
+            </div>
+            <div class="drawer-content">
+                <div class="filter-section">
+                    <h3>Category</h3>
+                    <select class="mobile-filter-select" id="mobileCategoryFilter" onchange="applyMobileFilters()">
+                        <option value="">All Categories</option>
+                        <option value="Programming Languages">Programming Languages</option>
+                        <option value="Reference">Reference</option>
+                        <option value="Math">Math</option>
+                        <option value="Business">Business</option>
+                    </select>
+                </div>
+
+                <div class="filter-section">
+                    <h3>Subject</h3>
+                    <select class="mobile-filter-select" id="mobileSubjectFilter" onchange="applyMobileFilters()">
+                        <option value="">All Subjects</option>
+                        <option value="Python">Python</option>
+                        <option value="JavaScript">JavaScript</option>
+                        <option value="Data Science">Data Science</option>
+                        <option value="Web Development">Web Development</option>
+                    </select>
+                </div>
+
+                <div class="filter-section">
+                    <h3>Rating</h3>
+                    <select class="mobile-filter-select" id="mobileRatingFilter" onchange="applyMobileFilters()">
+                        <option value="0">All Ratings</option>
+                        <option value="3">3+ Stars</option>
+                        <option value="4">4+ Stars</option>
+                        <option value="5">5 Stars Only</option>
+                    </select>
+                </div>
+
+                <button class="quick-action-btn" onclick="resetMobileFilters()" style="width: 100%; margin-top: 20px;">
+                    🔄 Reset Filters
+                </button>
+            </div>
+        </div>
+
+        <!-- Drawer Overlay -->
+        <div class="drawer-overlay" id="drawerOverlay" onclick="toggleFilterDrawer()"></div>
+
+        <!-- Error Toast -->
+        <div class="error-toast" id="errorToast"></div>
+    </div>
+
+    <script>
+        // Anderson's Library Mobile App
+        // Ecosystem Requirement: JavaScript follows mobile web ecosystem standards
+        // Function naming: camelCase (JavaScript/mobile convention)
+        // Variable naming: camelCase (JavaScript/mobile convention)
+        // Constants: UPPER_SNAKE_CASE (JavaScript convention)
+        // Event handling: Touch-optimized with haptic feedback
+        
+        // Application State
+        let mobileSelectedBook = null;
+        let mobileSearchTimeout = null;
+        let isFilterDrawerOpen = false;
+        let pullStartY = 0;
+        let isPulling = false;
+        let currentMobileBooks = [];
+        let mobileFilters = {
+            category: '',
+            subject: '',
+            rating: 0
+        };
+
+        // Sample book data (would come from FastAPI in real implementation)
+        const MOBILE_SAMPLE_BOOKS = [
+            {
+                id: 1,
+                title: "Python Crash Course",
+                author: "Eric Matthes",
+                category: "Programming Languages",
+                subject: "Python",
+                rating: 5,
+                thumbnail: "📘"
+            },
+            {
+                id: 2,
+                title: "Clean Code: A Handbook of Agile Software Craftsmanship",
+                author: "Robert C. Martin",
+                category: "Programming Languages",
+                subject: "Software Engineering",
+                rating: 5,
+                thumbnail: "📗"
+            },
+            {
+                id: 3,
+                title: "JavaScript: The Good Parts",
+                author: "Douglas Crockford",
+                category: "Programming Languages",
+                subject: "JavaScript",
+                rating: 4,
+                thumbnail: "📙"
+            },
+            {
+                id: 4,
+                title: "Design Patterns: Elements of Reusable Object-Oriented Software",
+                author: "Erich Gamma, Richard Helm, Ralph Johnson, John Vlissides",
+                category: "Programming Languages",
+                subject: "Software Architecture",
+                rating: 5,
+                thumbnail: "📕"
+            },
+            {
+                id: 5,
+                title: "Data Science from Scratch: First Principles with Python",
+                author: "Joel Grus",
+                category: "Math",
+                subject: "Data Science",
+                rating: 4,
+                thumbnail: "📘"
+            },
+            {
+                id: 6,
+                title: "You Don't Know JS: Scope & Closures",
+                author: "Kyle Simpson",
+                category: "Programming Languages",
+                subject: "JavaScript",
+                rating: 5,
+                thumbnail: "📗"
+            }
+        ];
+
+        // Initialize Mobile App
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeMobileApp();
+        });
+
+        function initializeMobileApp() {
+            console.log('Anderson\'s Library Mobile - Design Standard v2.0 Loading');
+            
+            // Load initial books
+            displayMobileBooks(MOBILE_SAMPLE_BOOKS);
+            
+            // Setup mobile search
+            setupMobileSearch();
+            
+            // Setup pull-to-refresh
+            setupPullToRefresh();
+            
+            // Setup touch handlers
+            setupTouchHandlers();
+            
+            // Hide address bar on mobile
+            setTimeout(() => {
+                if (window.scrollTo) {
+                    window.scrollTo(0, 1);
+                }
+            }, 100);
+            
+            console.log('Mobile app initialized successfully');
+        }
+
+        // Mobile Search with Debouncing
+        function setupMobileSearch() {
+            const searchInput = document.getElementById('mobileSearchInput');
+            const clearBtn = document.getElementById('clearSearchBtn');
+            
+            searchInput.addEventListener('input', function(e) {
+                const searchTerm = e.target.value.trim();
+                
+                // Show/hide clear button
+                if (searchTerm.length > 0) {
+                    clearBtn.style.display = 'flex';
+                } else {
+                    clearBtn.style.display = 'none';
+                }
+
+                clearTimeout(mobileSearchTimeout);
+                mobileSearchTimeout = setTimeout(() => {
+                    performMobileSearch(searchTerm);
+                }, 300);
+            });
+
+            // Handle search input focus for better mobile UX
+            searchInput.addEventListener('focus', function() {
+                this.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            });
+        }
+
+        function performMobileSearch(searchTerm) {
+            if (searchTerm.length === 0) {
+                displayMobileBooks(MOBILE_SAMPLE_BOOKS);
+                updateMobileStats(MOBILE_SAMPLE_BOOKS.length);
+                return;
+            }
+            
+            showMobileLoading(true);
+            
+            // Simulate API call with haptic feedback
+            if (navigator.vibrate) {
+                navigator.vibrate(10); // Subtle search feedback
+            }
+            
+            setTimeout(() => {
+                const filteredBooks = MOBILE_SAMPLE_BOOKS.filter(book => 
+                    book.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    book.author.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    book.subject.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    book.category.toLowerCase().includes(searchTerm.toLowerCase())
+                );
+                
+                displayMobileBooks(filteredBooks);
+                updateMobileStats(filteredBooks.length);
+                showMobileLoading(false);
+                
+                if (filteredBooks.length === 0) {
+                    showEmptyState(true);
+                    showErrorToast('No books found matching your search');
+                } else {
+                    showEmptyState(false);
+                }
+            }, 500);
+        }
+
+        function clearMobileSearch() {
+            const searchInput = document.getElementById('mobileSearchInput');
+            const clearBtn = document.getElementById('clearSearchBtn');
+            
+            searchInput.value = '';
+            clearBtn.style.display = 'none';
+            
+            displayMobileBooks(MOBILE_SAMPLE_BOOKS);
+            updateMobileStats(MOBILE_SAMPLE_BOOKS.length);
+            showEmptyState(false);
+            
+            // Haptic feedback
+            if (navigator.vibrate) {
+                navigator.vibrate(10);
+            }
+        }
+
+        // Book Selection with Haptic Feedback
+        function selectMobileBook(bookCard, book) {
+            // Add haptic feedback
+            if (navigator.vibrate) {
+                navigator.vibrate(50);
+            }
+            
+            // Remove previous selection
+            if (mobileSelectedBook) {
+                mobileSelectedBook.classList.remove('selected');
+            }
+            
+            // Select new book
+            mobileSelectedBook = bookCard;
+            bookCard.classList.add('selected');
+            
+            console.log('Selected mobile book:', book);
+            
+            // Could open book details modal here
+            setTimeout(() => {
+                showErrorToast(`Selected: ${book.title}`);
+            }, 100);
+        }
+
+        // Filter Drawer Management
+        function toggleFilterDrawer() {
+            const drawer = document.getElementById('filterDrawer');
+            const overlay = document.getElementById('drawerOverlay');
+            
+            isFilterDrawerOpen = !isFilterDrawerOpen;
+            
+            if (isFilterDrawerOpen) {
+                drawer.classList.add('open');
+                overlay.classList.add('open');
+                document.body.style.overflow = 'hidden';
+                
+                // Haptic feedback for opening
+                if (navigator.vibrate) {
+                    navigator.vibrate(30);
+                }
+            } else {
+                drawer.classList.remove('open');
+                overlay.classList.remove('open');
+                document.body.style.overflow = '';
+                
+                // Haptic feedback for closing
+                if (navigator.vibrate) {
+                    navigator.vibrate(20);
+                }
+            }
+        }
+
+        // Filter Management
+        function applyMobileFilters() {
+            const category = document.getElementById('mobileCategoryFilter').value;
+            const subject = document.getElementById('mobileSubjectFilter').value;
+            const rating = parseInt(document.getElementById('mobileRatingFilter').value);
+            
+            mobileFilters = { category, subject, rating };
+            
+            showMobileLoading(true);
+            
+            setTimeout(() => {
+                let filteredBooks = MOBILE_SAMPLE_BOOKS.filter(book => {
+                    if (category && book.category !== category) return false;
+                    if (subject && book.subject !== subject) return false;
+                    if (rating > 0 && book.rating < rating) return false;
+                    return true;
+                });
+                
+                displayMobileBooks(filteredBooks);
+                updateMobileStats(filteredBooks.length);
+                showMobileLoading(false);
+                
+                if (filteredBooks.length === 0) {
+                    showEmptyState(true);
+                } else {
+                    showEmptyState(false);
+                }
+                
+                // Haptic feedback for filter application
+                if (navigator.vibrate) {
+                    navigator.vibrate([50, 25, 50]);
+                }
+            }, 300);
+        }
+
+        function resetMobileFilters() {
+            document.getElementById('mobileCategoryFilter').value = '';
+            document.getElementById('mobileSubjectFilter').value = '';
+            document.getElementById('mobileRatingFilter').value = '0';
+            
+            mobileFilters = { category: '', subject: '', rating: 0 };
+            
+            displayMobileBooks(MOBILE_SAMPLE_BOOKS);
+            updateMobileStats(MOBILE_SAMPLE_BOOKS.length);
+            showEmptyState(false);
+            
+            toggleFilterDrawer();
+            
+            // Success haptic pattern
+            if (navigator.vibrate) {
+                navigator.vibrate([100, 50, 100]);
+            }
+        }
+
+        // Pull to Refresh Implementation
+        function setupPullToRefresh() {
+            const bookList = document.getElementById('mobileBookList');
+            const pullRefresh = document.getElementById('pullRefresh');
+
+            bookList.addEventListener('touchstart', handleTouchStart, { passive: true });
+            bookList.addEventListener('touchmove', handleTouchMove, { passive: false });
+            bookList.addEventListener('touchend', handleTouchEnd, { passive: true });
+        }
+
+        function handleTouchStart(e) {
+            pullStartY = e.touches[0].clientY;
+            isPulling = document.getElementById('mobileBookList').scrollTop === 0;
+        }
+
+        function handleTouchMove(e) {
+            if (!isPulling) return;
+            
+            const currentY = e.touches[0].clientY;
+            const pullDistance = currentY - pullStartY;
+            const pullRefresh = document.getElementById('pullRefresh');
+            
+            if (pullDistance > 0 && pullDistance < 120) {
+                e.preventDefault();
+                pullRefresh.style.top = `${20 + pullDistance * 0.5}px`;
+                pullRefresh.classList.add('visible');
+                
+                if (pullDistance > 80) {
+                    pullRefresh.classList.add('active');
+                    pullRefresh.textContent = '🔄 Release to refresh';
+                } else {
+                    pullRefresh.classList.remove('active');
+                    pullRefresh.textContent = '🔄 Pull to refresh';
+                }
+            }
+        }
+
+        function handleTouchEnd(e) {
+            if (!isPulling) return;
+            
+            const currentY = e.changedTouches[0].clientY;
+            const pullDistance = currentY - pullStartY;
+            const pullRefresh = document.getElementById('pullRefresh');
+            
+            if (pullDistance > 80) {
+                refreshMobileBooks();
+            }
+            
+            pullRefresh.classList.remove('visible', 'active');
+            pullRefresh.style.top = '-60px';
+            pullRefresh.textContent = '🔄 Pull to refresh';
+            isPulling = false;
+        }
+
+        function refreshMobileBooks() {
+            showMobileLoading(true);
+            
+            // Simulate refresh with haptic feedback
+            if (navigator.vibrate) {
+                navigator.vibrate([100, 50, 100]);
+            }
+            
+            setTimeout(() => {
+                console.log('Refreshing mobile books...');
+                displayMobileBooks(MOBILE_SAMPLE_BOOKS);
+                updateMobileStats(MOBILE_SAMPLE_BOOKS.length);
+                showMobileLoading(false);
+                showErrorToast('Library refreshed');
+            }, 1500);
+        }
+
+        // Touch Handler Setup
+        function setupTouchHandlers() {
+            // Prevent zoom on double tap
+            let lastTouchEnd = 0;
+            document.addEventListener('touchend', function (event) {
+                const now = (new Date()).getTime();
+                if (now - lastTouchEnd <= 300) {
+                    event.preventDefault();
+                }
+                lastTouchEnd = now;
+            }, false);
+
+            // Handle orientation change
+            window.addEventListener('orientationchange', function() {
+                setTimeout(() => {
+                    window.scrollTo(0, 0);
+                }, 100);
+            });
+        }
+
+        // Book Display Functions
+        function displayMobileBooks(books) {
+            const list = document.getElementById('mobileBookList');
+            list.innerHTML = '';
+            
+            books.forEach(book => {
+                const card = createMobileBookCard(book);
+                list.appendChild(card);
+            });
+            
+            currentMobileBooks = books;
+        }
+
+        function createMobileBookCard(book) {
+            const card = document.createElement('div');
+            card.className = 'mobile-book-card';
+            card.onclick = () => selectMobileBook(card, book);
+            card.dataset.bookId = book.id;
+            
+            card.innerHTML = `
+                <div class="mobile-book-cover">${book.thumbnail}</div>
+                <div class="mobile-book-info">
+                    <div class="mobile-book-title">${book.title}</div>
+                    <div class="mobile-book-author">${book.author}</div>
+                    <div class="mobile-book-meta">
+                        <div class="mobile-category-tag">${book.subject}</div>
+                        <div class="mobile-rating">${'⭐'.repeat(book.rating)}</div>
+                    </div>
+                </div>
+                <div class="mobile-book-arrow">›</div>
+            `;
+            
+            return card;
+        }
+
+        // Quick Actions
+        function showRandomBook() {
+            if (currentMobileBooks.length === 0) return;
+            
+            const randomBook = currentMobileBooks[Math.floor(Math.random() * currentMobileBooks.length)];
+            const bookCard = document.querySelector(`[data-book-id="${randomBook.id}"]`);
+            
+            if (bookCard) {
+                selectMobileBook(bookCard, randomBook);
+                bookCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+            
+            // Fun haptic pattern for random
+            if (navigator.vibrate) {
+                navigator.vibrate([50, 50, 50, 50, 100]);
+            }
+        }
+
+        function showRecentBooks() {
+            showErrorToast('Recent books feature coming soon');
+            showMobileLoading(true);
+            setTimeout(() => showMobileLoading(false), 500);
+        }
+
+        function showFavoriteBooks() {
+            showErrorToast('Favorites feature coming soon');
+            showMobileLoading(true);
+            setTimeout(() => showMobileLoading(false), 500);
+        }
+
+        function showProfile() {
+            showErrorToast('User profile coming soon');
+        }
+
+        // UI Helper Functions
+        function showMobileLoading(show) {
+            document.getElementById('mobileLoading').style.display = show ? 'flex' : 'none';
+        }
+
+        function updateMobileStats(bookCount) {
+            document.getElementById('totalBooks').textContent = bookCount;
+        }
+
+        function showEmptyState(show) {
+            const emptyState = document.getElementById('emptyState');
+            const bookList = document.getElementById('mobileBookList');
+            
+            if (show) {
+                emptyState.style.display = 'flex';
+                bookList.style.display = 'none';
+            } else {
+                emptyState.style.display = 'none';
+                bookList.style.display = 'block';
+            }
+        }
+
+        function showErrorToast(message) {
+            const toast = document.getElementById('errorToast');
+            toast.textContent = message;
+            toast.classList.add('show');
+            
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+
+        console.log('Anderson\'s Library Mobile - Design Standard v2.0 Loaded');
+    </script>
+</body>
+</html>

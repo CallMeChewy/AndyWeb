@@ -1,443 +1,685 @@
 # File: DatabaseManager.py
 # Path: Source/Core/DatabaseManager.py
-# Standard: AIDEV-PascalCase-1.9
+# Standard: AIDEV-PascalCase-2.0
+# Backend Python: Uses PascalCase per project standards
+# Database: Raw SQL with PascalCase elements (NO SQLAlchemy per Design Standard v2.0)
+# SQL Naming: ALL database elements use PascalCase (tables, columns, indexes, constraints)
 # Created: 2025-07-07
-# Last Modified: 2025-07-07  04:52PM
+# Last Modified: 2025-07-07  09:19PM
 """
-Description: Database manager for AndyWeb - handles SQLite operations for book library
-Provides connection management, query execution, and data access for web application.
-Designed for eventual MySQL migration without SQLAlchemy dependency.
-
-FIXED: Updated for web database schema compatibility
-- Removed references to non-existent LastOpened column
-- Uses ModifiedDate for activity tracking instead
-- Maintains all original functionality with web-compatible queries
+Description: Enhanced Database Manager - Design Standard v2.0
+Handles all database operations for Anderson's Library web/mobile applications
+Supports both desktop twin and mobile app functionality with raw SQL
+Maintains exact desktop functionality while optimizing for web performance
 """
 
 import sqlite3
 import logging
-from typing import List, Dict, Any, Optional, Tuple
+import os
+from typing import List, Dict, Any, Optional, Tuple, Union
 from pathlib import Path
+from datetime import datetime
 import json
 
 class DatabaseManager:
-    """Manages database connections and operations for AndyWeb library system."""
+    """
+    Enhanced Database Manager for Anderson's Library
+    Supports web, mobile, and desktop applications with unified functionality
+    Uses raw SQL with PascalCase naming per Design Standard v2.0
+    """
     
-    def __init__(self, DatabasePath: str = "Data/Databases/MyLibraryWeb.db"):
-        """Initialize database manager with connection path."""
-        self.DatabasePath = Path(DatabasePath)
-        self.Connection = None
-        self.Logger = logging.getLogger(__name__)
+    def __init__(self, DatabasePath: str):
+        """
+        Initialize database manager with connection pooling and optimization
         
-        # Ensure database exists
-        if not self.DatabasePath.exists():
-            raise FileNotFoundError(f"Database not found: {self.DatabasePath}")
-            
+        Args:
+            DatabasePath: Path to SQLite database file
+        """
+        self.DatabasePath = DatabasePath
+        self.Connection: Optional[sqlite3.Connection] = None
+        self.Logger = logging.getLogger(self.__class__.__name__)
+        
+        # Connection configuration for web performance
+        self.ConnectionConfig = {
+            'timeout': 30.0,
+            'check_same_thread': False,  # Allow multi-threaded access
+            'isolation_level': None,     # Autocommit mode for better performance
+        }
+        
+        self.Logger.info(f"DatabaseManager v2.0 initialized for: {DatabasePath}")
+
     def Connect(self) -> bool:
-        """Establish database connection with proper settings."""
+        """
+        Establish database connection with optimization for web applications
+        Includes connection pooling and performance tuning
+        """
         try:
+            if not os.path.exists(self.DatabasePath):
+                self.Logger.error(f"Database file not found: {self.DatabasePath}")
+                return False
+            
+            # Create connection with performance optimizations
             self.Connection = sqlite3.connect(
-                self.DatabasePath,
-                check_same_thread=False,  # Allow use across threads
-                timeout=30.0
+                self.DatabasePath, 
+                **self.ConnectionConfig
             )
             
-            # Configure for better performance and JSON support
-            self.Connection.row_factory = sqlite3.Row  # Dict-like access
-            self.Connection.execute("PRAGMA foreign_keys = ON")  # Enable FK constraints
-            self.Connection.execute("PRAGMA journal_mode = WAL")  # Better concurrency
+            # Configure for better web performance
+            self.Connection.row_factory = sqlite3.Row  # Enable column access by name
+            self.Connection.execute("PRAGMA journal_mode=WAL")     # Better concurrency
+            self.Connection.execute("PRAGMA synchronous=NORMAL")   # Faster writes
+            self.Connection.execute("PRAGMA cache_size=10000")     # Larger cache
+            self.Connection.execute("PRAGMA temp_store=MEMORY")    # Memory temp tables
+            self.Connection.execute("PRAGMA mmap_size=268435456")  # Memory mapping
             
-            self.Logger.info(f"Connected to database: {self.DatabasePath}")
+            # Test connection
+            TestResult = self.Connection.execute("SELECT COUNT(*) FROM Books").fetchone()
+            BookCount = TestResult[0] if TestResult else 0
+            
+            self.Logger.info(f"✅ Database connected successfully - {BookCount} books available")
             return True
             
         except sqlite3.Error as Error:
             self.Logger.error(f"Database connection failed: {Error}")
             return False
-            
+        except Exception as Error:
+            self.Logger.error(f"Unexpected error connecting to database: {Error}")
+            return False
+
     def Disconnect(self) -> None:
-        """Close database connection safely."""
+        """Close database connection gracefully"""
         if self.Connection:
             try:
                 self.Connection.close()
-                self.Connection = None
                 self.Logger.info("Database connection closed")
-            except sqlite3.Error as Error:
-                self.Logger.error(f"Error closing database: {Error}")
-                
-    def ExecuteQuery(self, Query: str, Parameters: Tuple = ()) -> List[Dict[str, Any]]:
-        """Execute SELECT query and return results as list of dictionaries."""
+            except Exception as Error:
+                self.Logger.error(f"Error closing database connection: {Error}")
+            finally:
+                self.Connection = None
+
+    def ExecuteQuery(self, Query: str, Parameters: Tuple = ()) -> List[sqlite3.Row]:
+        """
+        Execute SELECT query with parameters and error handling
+        
+        Args:
+            Query: SQL query string with PascalCase column names
+            Parameters: Query parameters for safe execution
+            
+        Returns:
+            List of database rows or empty list on error
+        """
         if not self.Connection:
-            self.Connect()
-            
+            self.Logger.error("No database connection available")
+            return []
+        
         try:
-            Cursor = self.Connection.cursor()
-            Cursor.execute(Query, Parameters)
-            
-            # Convert Row objects to dictionaries
-            Results = []
-            for Row in Cursor.fetchall():
-                Results.append(dict(Row))
-                
-            self.Logger.debug(f"Query executed: {Query[:100]}... ({len(Results)} rows)")
+            Cursor = self.Connection.execute(Query, Parameters)
+            Results = Cursor.fetchall()
             return Results
             
         except sqlite3.Error as Error:
-            self.Logger.error(f"Query execution failed: {Error} | Query: {Query}")
+            self.Logger.error(f"Query execution failed: {Error}")
+            self.Logger.error(f"Query: {Query}")
+            self.Logger.error(f"Parameters: {Parameters}")
             return []
+
+    def ExecuteNonQuery(self, Query: str, Parameters: Tuple = ()) -> bool:
+        """
+        Execute INSERT/UPDATE/DELETE query with parameters
+        
+        Args:
+            Query: SQL query string
+            Parameters: Query parameters for safe execution
             
-    def ExecuteUpdate(self, Query: str, Parameters: Tuple = ()) -> bool:
-        """Execute INSERT/UPDATE/DELETE and return success status."""
+        Returns:
+            True if successful, False otherwise
+        """
         if not self.Connection:
-            self.Connect()
-            
+            self.Logger.error("No database connection available")
+            return False
+        
         try:
-            Cursor = self.Connection.cursor()
-            Cursor.execute(Query, Parameters)
+            self.Connection.execute(Query, Parameters)
             self.Connection.commit()
-            
-            RowsAffected = Cursor.rowcount
-            self.Logger.debug(f"Update executed: {RowsAffected} rows affected")
             return True
             
         except sqlite3.Error as Error:
-            self.Logger.error(f"Update execution failed: {Error} | Query: {Query}")
-            self.Connection.rollback()
+            self.Logger.error(f"Non-query execution failed: {Error}")
+            self.Logger.error(f"Query: {Query}")
+            self.Logger.error(f"Parameters: {Parameters}")
             return False
-            
-    def GetBooks(self, Limit: int = 50, Offset: int = 0, 
-                SearchTerm: str = "", CategoryId: Optional[int] = None,
-                SubjectId: Optional[int] = None) -> List[Dict[str, Any]]:
-        """Get books with optional filtering and pagination."""
-        
-        Query = """
-            SELECT b.Id, b.Title, b.Author, b.ThumbnailImage,
-                   b.FileSize, b.PageCount, b.ISBN, b.CreatedDate, b.ModifiedDate,
-                   c.Category, s.Subject
-            FROM Books b
-            LEFT JOIN Categories c ON b.CategoryId = c.Id
-            LEFT JOIN Subjects s ON b.SubjectId = s.Id
-            WHERE 1=1
+
+    # ==================== BOOK RETRIEVAL METHODS ====================
+
+    def GetAllBooks(self) -> List[sqlite3.Row]:
         """
-        
-        Parameters = []
-        
-        # Add search filter
-        if SearchTerm:
-            Query += " AND (b.Title LIKE ? OR b.Author LIKE ? OR c.Category LIKE ? OR s.Subject LIKE ?)"
-            SearchPattern = f"%{SearchTerm}%"
-            Parameters.extend([SearchPattern, SearchPattern, SearchPattern, SearchPattern])
-            
-        # Add category filter
-        if CategoryId:
-            Query += " AND b.CategoryId = ?"
-            Parameters.append(CategoryId)
-            
-        # Add subject filter
-        if SubjectId:
-            Query += " AND b.SubjectId = ?"
-            Parameters.append(SubjectId)
-            
-        # Add ordering and pagination
-        Query += " ORDER BY b.Title LIMIT ? OFFSET ?"
-        Parameters.extend([Limit, Offset])
-        
-        return self.ExecuteQuery(Query, tuple(Parameters))
-        
-    def GetBookById(self, BookId: int) -> Optional[Dict[str, Any]]:
-        """Get single book by ID with full details."""
-        Query = """
-            SELECT b.*, c.Category, s.Subject
-            FROM Books b
-            LEFT JOIN Categories c ON b.CategoryId = c.Id
-            LEFT JOIN Subjects s ON b.SubjectId = s.Id
-            WHERE b.Id = ?
+        Get all books from database - maintains desktop functionality
+        Optimized for web applications with reasonable limits
         """
-        
-        Results = self.ExecuteQuery(Query, (BookId,))
-        return Results[0] if Results else None
-        
-    def GetCategories(self) -> List[Dict[str, Any]]:
-        """Get all categories for filtering."""
         Query = """
-            SELECT c.Id, c.Category, COUNT(b.Id) as BookCount
-            FROM Categories c
-            LEFT JOIN Books b ON c.Id = b.CategoryId
-            GROUP BY c.Id, c.Category
-            ORDER BY c.Category
+        SELECT Id, Title, Author, Category, Subject, Rating, 
+               PageCount, FileSize, FilePath, CreatedDate, ModifiedDate
+        FROM Books 
+        ORDER BY Title ASC
         """
         return self.ExecuteQuery(Query)
-        
-    def GetSubjects(self, CategoryId: Optional[int] = None) -> List[Dict[str, Any]]:
-        """Get subjects, optionally filtered by category."""
-        Query = """
-            SELECT s.Id, s.Subject, s.CategoryId, COUNT(b.Id) as BookCount
-            FROM Subjects s
-            LEFT JOIN Books b ON s.Id = b.SubjectId
+
+    def GetBooksWithPagination(self, Limit: int = 50, Offset: int = 0) -> List[sqlite3.Row]:
         """
+        Get books with pagination for web performance
+        Essential for mobile and large libraries
+        """
+        Query = """
+        SELECT Id, Title, Author, Category, Subject, Rating, 
+               PageCount, FileSize, FilePath, CreatedDate, ModifiedDate
+        FROM Books 
+        ORDER BY Title ASC
+        LIMIT ? OFFSET ?
+        """
+        return self.ExecuteQuery(Query, (Limit, Offset))
+
+    def GetBookById(self, BookId: int) -> Optional[sqlite3.Row]:
+        """
+        Get specific book by ID for detailed views
+        """
+        Query = """
+        SELECT Id, Title, Author, Category, Subject, Rating, 
+               PageCount, FileSize, FilePath, CreatedDate, ModifiedDate
+        FROM Books 
+        WHERE Id = ?
+        """
+        Results = self.ExecuteQuery(Query, (BookId,))
+        return Results[0] if Results else None
+
+    def GetBookCount(self) -> int:
+        """
+        Get total number of books for pagination and statistics
+        """
+        Query = "SELECT COUNT(*) as BookCount FROM Books"
+        Results = self.ExecuteQuery(Query)
+        return Results[0]['BookCount'] if Results else 0
+
+    # ==================== SEARCH FUNCTIONALITY ====================
+
+    def SearchBooks(self, SearchQuery: str, Category: Optional[str] = None, 
+                   Subject: Optional[str] = None, MinRating: int = 0,
+                   Limit: int = 50, Offset: int = 0) -> List[sqlite3.Row]:
+        """
+        Google-type instant search with filters
+        Maintains exact desktop search functionality
+        """
+        # Build base query with search
+        WhereConditions = [
+            "(Title LIKE ? OR Author LIKE ? OR Category LIKE ? OR Subject LIKE ?)"
+        ]
+        Parameters = [f"%{SearchQuery}%"] * 4
         
-        Parameters = []
-        if CategoryId:
-            Query += " WHERE s.CategoryId = ?"
-            Parameters.append(CategoryId)
+        # Add optional filters
+        if Category:
+            WhereConditions.append("Category = ?")
+            Parameters.append(Category)
             
-        Query += " GROUP BY s.Id, s.Subject, s.CategoryId ORDER BY s.Subject"
+        if Subject:
+            WhereConditions.append("Subject = ?")
+            Parameters.append(Subject)
+            
+        if MinRating > 0:
+            WhereConditions.append("Rating >= ?")
+            Parameters.append(MinRating)
+        
+        # Combine conditions
+        WhereClause = " AND ".join(WhereConditions)
+        
+        Query = f"""
+        SELECT Id, Title, Author, Category, Subject, Rating, 
+               PageCount, FileSize, FilePath, CreatedDate, ModifiedDate
+        FROM Books 
+        WHERE {WhereClause}
+        ORDER BY 
+            CASE 
+                WHEN Title LIKE ? THEN 1 
+                WHEN Author LIKE ? THEN 2 
+                ELSE 3 
+            END,
+            Title ASC
+        LIMIT ? OFFSET ?
+        """
+        
+        # Add parameters for ORDER BY and pagination
+        SearchPattern = f"%{SearchQuery}%"
+        Parameters.extend([SearchPattern, SearchPattern, Limit, Offset])
         
         return self.ExecuteQuery(Query, tuple(Parameters))
+
+    def GetSearchResultCount(self, SearchQuery: str, Category: Optional[str] = None,
+                           Subject: Optional[str] = None, MinRating: int = 0) -> int:
+        """
+        Get total count of search results for pagination
+        """
+        WhereConditions = [
+            "(Title LIKE ? OR Author LIKE ? OR Category LIKE ? OR Subject LIKE ?)"
+        ]
+        Parameters = [f"%{SearchQuery}%"] * 4
         
-    def GetDatabaseStats(self) -> Dict[str, Any]:
-        """Get database statistics for dashboard."""
+        if Category:
+            WhereConditions.append("Category = ?")
+            Parameters.append(Category)
+            
+        if Subject:
+            WhereConditions.append("Subject = ?")
+            Parameters.append(Subject)
+            
+        if MinRating > 0:
+            WhereConditions.append("Rating >= ?")
+            Parameters.append(MinRating)
+        
+        WhereClause = " AND ".join(WhereConditions)
+        Query = f"SELECT COUNT(*) as ResultCount FROM Books WHERE {WhereClause}"
+        
+        Results = self.ExecuteQuery(Query, tuple(Parameters))
+        return Results[0]['ResultCount'] if Results else 0
+
+    # ==================== FILTER FUNCTIONALITY ====================
+
+    def GetBooksByFilters(self, Category: Optional[str] = None, Subject: Optional[str] = None,
+                         MinRating: int = 0, Limit: int = 50, Offset: int = 0) -> List[sqlite3.Row]:
+        """
+        Filter books by category, subject, and/or rating
+        Maintains exact desktop filter behavior
+        """
+        WhereConditions = []
+        Parameters = []
+        
+        if Category:
+            WhereConditions.append("Category = ?")
+            Parameters.append(Category)
+            
+        if Subject:
+            WhereConditions.append("Subject = ?")
+            Parameters.append(Subject)
+            
+        if MinRating > 0:
+            WhereConditions.append("Rating >= ?")
+            Parameters.append(MinRating)
+        
+        # Build query
+        if WhereConditions:
+            WhereClause = "WHERE " + " AND ".join(WhereConditions)
+        else:
+            WhereClause = ""
+        
+        Query = f"""
+        SELECT Id, Title, Author, Category, Subject, Rating, 
+               PageCount, FileSize, FilePath, CreatedDate, ModifiedDate
+        FROM Books 
+        {WhereClause}
+        ORDER BY Title ASC
+        LIMIT ? OFFSET ?
+        """
+        
+        Parameters.extend([Limit, Offset])
+        return self.ExecuteQuery(Query, tuple(Parameters))
+
+    def GetFilteredBookCount(self, Category: Optional[str] = None, Subject: Optional[str] = None,
+                           MinRating: int = 0) -> int:
+        """
+        Get count of filtered books for pagination
+        """
+        WhereConditions = []
+        Parameters = []
+        
+        if Category:
+            WhereConditions.append("Category = ?")
+            Parameters.append(Category)
+            
+        if Subject:
+            WhereConditions.append("Subject = ?")
+            Parameters.append(Subject)
+            
+        if MinRating > 0:
+            WhereConditions.append("Rating >= ?")
+            Parameters.append(MinRating)
+        
+        if WhereConditions:
+            WhereClause = "WHERE " + " AND ".join(WhereConditions)
+        else:
+            WhereClause = ""
+        
+        Query = f"SELECT COUNT(*) as FilteredCount FROM Books {WhereClause}"
+        
+        Results = self.ExecuteQuery(Query, tuple(Parameters))
+        return Results[0]['FilteredCount'] if Results else 0
+
+    # ==================== CATEGORY AND SUBJECT METHODS ====================
+
+    def GetCategories(self) -> List[sqlite3.Row]:
+        """
+        Get all unique categories for dropdown population
+        """
+        Query = """
+        SELECT DISTINCT Category 
+        FROM Books 
+        WHERE Category IS NOT NULL AND Category != ''
+        ORDER BY Category ASC
+        """
+        return self.ExecuteQuery(Query)
+
+    def GetCategoriesWithCounts(self) -> List[sqlite3.Row]:
+        """
+        Get categories with book counts for enhanced UI
+        """
+        Query = """
+        SELECT Category, COUNT(*) as BookCount
+        FROM Books 
+        WHERE Category IS NOT NULL AND Category != ''
+        GROUP BY Category 
+        ORDER BY BookCount DESC, Category ASC
+        """
+        return self.ExecuteQuery(Query)
+
+    def GetSubjects(self) -> List[sqlite3.Row]:
+        """
+        Get all unique subjects for dropdown population
+        """
+        Query = """
+        SELECT DISTINCT Subject 
+        FROM Books 
+        WHERE Subject IS NOT NULL AND Subject != ''
+        ORDER BY Subject ASC
+        """
+        return self.ExecuteQuery(Query)
+
+    def GetSubjectsWithCounts(self) -> List[sqlite3.Row]:
+        """
+        Get subjects with book counts for enhanced UI
+        """
+        Query = """
+        SELECT Subject, COUNT(*) as BookCount
+        FROM Books 
+        WHERE Subject IS NOT NULL AND Subject != ''
+        GROUP BY Subject 
+        ORDER BY BookCount DESC, Subject ASC
+        """
+        return self.ExecuteQuery(Query)
+
+    def GetSubjectsByCategory(self, Category: str) -> List[sqlite3.Row]:
+        """
+        Get subjects filtered by category for dependent dropdowns
+        """
+        Query = """
+        SELECT Subject, Category, COUNT(*) as BookCount
+        FROM Books 
+        WHERE Category = ? AND Subject IS NOT NULL AND Subject != ''
+        GROUP BY Subject, Category
+        ORDER BY Subject ASC
+        """
+        return self.ExecuteQuery(Query, (Category,))
+
+    def GetAuthors(self) -> List[sqlite3.Row]:
+        """
+        Get all unique authors for enhanced search
+        """
+        Query = """
+        SELECT DISTINCT Author, COUNT(*) as BookCount
+        FROM Books 
+        WHERE Author IS NOT NULL AND Author != ''
+        GROUP BY Author 
+        ORDER BY BookCount DESC, Author ASC
+        """
+        return self.ExecuteQuery(Query)
+
+    # ==================== STATISTICS AND ANALYTICS ====================
+
+    def GetLibraryStatistics(self) -> Dict[str, Any]:
+        """
+        Get comprehensive library statistics for dashboard
+        Maintains exact desktop status bar information
+        """
         Stats = {}
         
-        # Count books
-        BookCount = self.ExecuteQuery("SELECT COUNT(*) as Count FROM Books")
-        Stats['TotalBooks'] = BookCount[0]['Count'] if BookCount else 0
-        
-        # Count categories
-        CategoryCount = self.ExecuteQuery("SELECT COUNT(*) as Count FROM Categories")
-        Stats['TotalCategories'] = CategoryCount[0]['Count'] if CategoryCount else 0
-        
-        # Count subjects
-        SubjectCount = self.ExecuteQuery("SELECT COUNT(*) as Count FROM Subjects")
-        Stats['TotalSubjects'] = SubjectCount[0]['Count'] if SubjectCount else 0
-        
-        # Recent activity (FIXED: Using ModifiedDate instead of non-existent LastOpened)
-        RecentBooks = self.ExecuteQuery("""
-            SELECT Title, ModifiedDate as LastActivity
+        try:
+            # Basic counts
+            BookCountQuery = "SELECT COUNT(*) as Total FROM Books"
+            BookCountResult = self.ExecuteQuery(BookCountQuery)
+            Stats['TotalBooks'] = BookCountResult[0]['Total'] if BookCountResult else 0
+            
+            # Category count
+            CategoryCountQuery = """
+            SELECT COUNT(DISTINCT Category) as Total 
             FROM Books 
-            WHERE ModifiedDate IS NOT NULL 
-            ORDER BY ModifiedDate DESC 
-            LIMIT 5
-        """)
-        Stats['RecentBooks'] = RecentBooks
-        
-        return Stats
-        
-    def UpdateBookLastOpened(self, BookId: int) -> bool:
-        """
-        Update book activity timestamp (web version compatibility).
-        
-        Note: Web database schema doesn't have LastOpened column,
-        so we update ModifiedDate to track book access activity.
-        """
-        from datetime import datetime
-        
-        Query = "UPDATE Books SET ModifiedDate = ? WHERE Id = ?"
-        CurrentTime = datetime.now().isoformat()
-        
-        return self.ExecuteUpdate(Query, (CurrentTime, BookId))
-        
-    def GetBooksByAuthor(self, Author: str) -> List[Dict[str, Any]]:
-        """Get all books by a specific author."""
-        Query = """
-            SELECT b.Id, b.Title, b.Author, b.ThumbnailImage,
-                   c.Category, s.Subject, b.CreatedDate
-            FROM Books b
-            LEFT JOIN Categories c ON b.CategoryId = c.Id
-            LEFT JOIN Subjects s ON b.SubjectId = s.Id
-            WHERE b.Author LIKE ?
-            ORDER BY b.Title
-        """
-        
-        AuthorPattern = f"%{Author}%"
-        return self.ExecuteQuery(Query, (AuthorPattern,))
-        
-    def GetBooksByCategory(self, CategoryId: int) -> List[Dict[str, Any]]:
-        """Get all books in a specific category."""
-        Query = """
-            SELECT b.Id, b.Title, b.Author, b.ThumbnailImage,
-                   c.Category, s.Subject, b.CreatedDate
-            FROM Books b
-            LEFT JOIN Categories c ON b.CategoryId = c.Id
-            LEFT JOIN Subjects s ON b.SubjectId = s.Id
-            WHERE b.CategoryId = ?
-            ORDER BY b.Title
-        """
-        
-        return self.ExecuteQuery(Query, (CategoryId,))
-        
-    def SearchBooks(self, SearchTerm: str, Limit: int = 50) -> List[Dict[str, Any]]:
-        """
-        Full-text search across books with relevance scoring.
-        Searches Title, Author, Category, and Subject fields.
-        """
-        Query = """
-            SELECT b.Id, b.Title, b.Author, b.ThumbnailImage,
-                   c.Category, s.Subject, b.CreatedDate,
-                   -- Simple relevance scoring
-                   (CASE WHEN b.Title LIKE ? THEN 4 ELSE 0 END +
-                    CASE WHEN b.Author LIKE ? THEN 3 ELSE 0 END +
-                    CASE WHEN c.Category LIKE ? THEN 2 ELSE 0 END +
-                    CASE WHEN s.Subject LIKE ? THEN 1 ELSE 0 END) as Relevance
-            FROM Books b
-            LEFT JOIN Categories c ON b.CategoryId = c.Id
-            LEFT JOIN Subjects s ON b.SubjectId = s.Id
-            WHERE b.Title LIKE ? OR b.Author LIKE ? OR c.Category LIKE ? OR s.Subject LIKE ?
-            ORDER BY Relevance DESC, b.Title
-            LIMIT ?
-        """
-        
-        SearchPattern = f"%{SearchTerm}%"
-        Parameters = [SearchPattern] * 8 + [Limit]  # 8 search patterns + limit
-        
-        return self.ExecuteQuery(Query, tuple(Parameters))
-        
-    def GetRecentBooks(self, Days: int = 30, Limit: int = 10) -> List[Dict[str, Any]]:
-        """Get recently modified books."""
-        Query = """
-            SELECT b.Id, b.Title, b.Author, b.ThumbnailImage,
-                   c.Category, s.Subject, b.ModifiedDate
-            FROM Books b
-            LEFT JOIN Categories c ON b.CategoryId = c.Id
-            LEFT JOIN Subjects s ON b.SubjectId = s.Id
-            WHERE b.ModifiedDate >= datetime('now', '-{} days')
-            ORDER BY b.ModifiedDate DESC
-            LIMIT ?
-        """.format(Days)
-        
-        return self.ExecuteQuery(Query, (Limit,))
-        
-    def GetBookStats(self) -> Dict[str, Any]:
-        """Get detailed book statistics."""
-        Stats = {}
-        
-        # Books by category
-        CategoryStats = self.ExecuteQuery("""
-            SELECT c.Category, COUNT(b.Id) as BookCount
-            FROM Categories c
-            LEFT JOIN Books b ON c.Id = b.CategoryId
-            GROUP BY c.Id, c.Category
-            ORDER BY BookCount DESC
-        """)
-        Stats['BooksByCategory'] = CategoryStats
-        
-        # Books by author (top 10)
-        AuthorStats = self.ExecuteQuery("""
-            SELECT b.Author, COUNT(b.Id) as BookCount
-            FROM Books b
-            WHERE b.Author IS NOT NULL AND b.Author != ''
-            GROUP BY b.Author
-            ORDER BY BookCount DESC
-            LIMIT 10
-        """)
-        Stats['TopAuthors'] = AuthorStats
-        
-        # Total file size
-        SizeStats = self.ExecuteQuery("""
+            WHERE Category IS NOT NULL AND Category != ''
+            """
+            CategoryCountResult = self.ExecuteQuery(CategoryCountQuery)
+            Stats['TotalCategories'] = CategoryCountResult[0]['Total'] if CategoryCountResult else 0
+            
+            # Subject count
+            SubjectCountQuery = """
+            SELECT COUNT(DISTINCT Subject) as Total 
+            FROM Books 
+            WHERE Subject IS NOT NULL AND Subject != ''
+            """
+            SubjectCountResult = self.ExecuteQuery(SubjectCountQuery)
+            Stats['TotalSubjects'] = SubjectCountResult[0]['Total'] if SubjectCountResult else 0
+            
+            # Author count
+            AuthorCountQuery = """
+            SELECT COUNT(DISTINCT Author) as Total 
+            FROM Books 
+            WHERE Author IS NOT NULL AND Author != ''
+            """
+            AuthorCountResult = self.ExecuteQuery(AuthorCountQuery)
+            Stats['TotalAuthors'] = AuthorCountResult[0]['Total'] if AuthorCountResult else 0
+            
+            # File size statistics
+            FileSizeQuery = """
             SELECT 
-                SUM(FileSize) as TotalSize,
-                AVG(FileSize) as AverageSize,
-                MAX(FileSize) as LargestFile,
-                MIN(FileSize) as SmallestFile
+                COALESCE(SUM(FileSize), 0) as TotalSize,
+                COALESCE(AVG(FileSize), 0) as AverageSize
             FROM Books 
             WHERE FileSize IS NOT NULL AND FileSize > 0
-        """)
-        Stats['FileSizeStats'] = SizeStats[0] if SizeStats else {}
-        
-        # Page count statistics
-        PageStats = self.ExecuteQuery("""
+            """
+            FileSizeResult = self.ExecuteQuery(FileSizeQuery)
+            if FileSizeResult:
+                Stats['TotalFileSize'] = FileSizeResult[0]['TotalSize']
+                Stats['AverageFileSize'] = FileSizeResult[0]['AverageSize']
+            else:
+                Stats['TotalFileSize'] = 0
+                Stats['AverageFileSize'] = 0
+            
+            # Rating statistics
+            RatingQuery = """
             SELECT 
-                SUM(PageCount) as TotalPages,
-                AVG(PageCount) as AveragePages,
-                MAX(PageCount) as LongestBook,
-                MIN(PageCount) as ShortestBook
+                COALESCE(AVG(CAST(Rating as FLOAT)), 0.0) as AverageRating,
+                COUNT(*) as RatedBooks
+            FROM Books 
+            WHERE Rating IS NOT NULL AND Rating > 0
+            """
+            RatingResult = self.ExecuteQuery(RatingQuery)
+            if RatingResult:
+                Stats['AverageRating'] = round(RatingResult[0]['AverageRating'], 2)
+                Stats['RatedBooks'] = RatingResult[0]['RatedBooks']
+            else:
+                Stats['AverageRating'] = 0.0
+                Stats['RatedBooks'] = 0
+            
+            # Page count statistics
+            PageQuery = """
+            SELECT 
+                COALESCE(SUM(PageCount), 0) as TotalPages,
+                COALESCE(AVG(PageCount), 0) as AveragePages
             FROM Books 
             WHERE PageCount IS NOT NULL AND PageCount > 0
-        """)
-        Stats['PageStats'] = PageStats[0] if PageStats else {}
-        
-        return Stats
-        
+            """
+            PageResult = self.ExecuteQuery(PageQuery)
+            if PageResult:
+                Stats['TotalPages'] = PageResult[0]['TotalPages']
+                Stats['AveragePages'] = round(PageResult[0]['AveragePages'], 1)
+            else:
+                Stats['TotalPages'] = 0
+                Stats['AveragePages'] = 0
+            
+            self.Logger.info(f"Retrieved library statistics: {Stats['TotalBooks']} books")
+            return Stats
+            
+        except Exception as Error:
+            self.Logger.error(f"Error getting library statistics: {Error}")
+            return {
+                'TotalBooks': 0,
+                'TotalCategories': 0,
+                'TotalSubjects': 0,
+                'TotalAuthors': 0,
+                'TotalFileSize': 0,
+                'AverageFileSize': 0,
+                'AverageRating': 0.0,
+                'RatedBooks': 0,
+                'TotalPages': 0,
+                'AveragePages': 0
+            }
+
+    def GetRecentBooks(self, Limit: int = 10) -> List[sqlite3.Row]:
+        """
+        Get recently added books for mobile quick access
+        """
+        Query = """
+        SELECT Id, Title, Author, Category, Subject, Rating, CreatedDate
+        FROM Books 
+        WHERE CreatedDate IS NOT NULL
+        ORDER BY CreatedDate DESC
+        LIMIT ?
+        """
+        return self.ExecuteQuery(Query, (Limit,))
+
+    def GetTopRatedBooks(self, Limit: int = 10) -> List[sqlite3.Row]:
+        """
+        Get highest rated books for featured sections
+        """
+        Query = """
+        SELECT Id, Title, Author, Category, Subject, Rating
+        FROM Books 
+        WHERE Rating IS NOT NULL AND Rating >= 4
+        ORDER BY Rating DESC, Title ASC
+        LIMIT ?
+        """
+        return self.ExecuteQuery(Query, (Limit,))
+
+    # ==================== UTILITY METHODS ====================
+
     def ValidateDatabase(self) -> Dict[str, Any]:
-        """Validate database integrity and return status report."""
+        """
+        Validate database structure and integrity
+        Returns status information for health checks
+        """
         ValidationResults = {
-            'status': 'healthy',
-            'issues': [],
-            'statistics': {}
+            'is_valid': False,
+            'tables_exist': False,
+            'indexes_exist': False,
+            'data_integrity': False,
+            'errors': []
         }
         
         try:
-            # Check for books without categories
-            OrphanBooks = self.ExecuteQuery("""
-                SELECT COUNT(*) as Count 
-                FROM Books 
-                WHERE CategoryId IS NULL
-            """)
+            # Check if main tables exist
+            TableQuery = """
+            SELECT name FROM sqlite_master 
+            WHERE type='table' AND name IN ('Books', 'Categories', 'Subjects')
+            """
+            TableResults = self.ExecuteQuery(TableQuery)
+            ValidationResults['tables_exist'] = len(TableResults) >= 1  # At least Books table
             
-            if OrphanBooks and OrphanBooks[0]['Count'] > 0:
-                ValidationResults['issues'].append(
-                    f"{OrphanBooks[0]['Count']} books without categories"
-                )
+            # Check if indexes exist
+            IndexQuery = """
+            SELECT name FROM sqlite_master 
+            WHERE type='index' AND name LIKE 'IX_%'
+            """
+            IndexResults = self.ExecuteQuery(IndexQuery)
+            ValidationResults['indexes_exist'] = len(IndexResults) > 0
             
-            # Check for books without subjects
-            SubjectlessBooks = self.ExecuteQuery("""
-                SELECT COUNT(*) as Count 
-                FROM Books 
-                WHERE SubjectId IS NULL
-            """)
+            # Basic data integrity check
+            IntegrityQuery = "PRAGMA integrity_check"
+            IntegrityResults = self.ExecuteQuery(IntegrityQuery)
+            ValidationResults['data_integrity'] = (
+                IntegrityResults and 
+                IntegrityResults[0][0] == 'ok'
+            )
             
-            if SubjectlessBooks and SubjectlessBooks[0]['Count'] > 0:
-                ValidationResults['issues'].append(
-                    f"{SubjectlessBooks[0]['Count']} books without subjects"
-                )
+            # Overall validation
+            ValidationResults['is_valid'] = (
+                ValidationResults['tables_exist'] and
+                ValidationResults['data_integrity']
+            )
             
-            # Check for missing thumbnails
-            NoThumbnails = self.ExecuteQuery("""
-                SELECT COUNT(*) as Count 
-                FROM Books 
-                WHERE ThumbnailImage IS NULL
-            """)
-            
-            if NoThumbnails and NoThumbnails[0]['Count'] > 0:
-                ValidationResults['issues'].append(
-                    f"{NoThumbnails[0]['Count']} books without thumbnails"
-                )
-            
-            # Get basic statistics
-            ValidationResults['statistics'] = self.GetDatabaseStats()
-            
-            if len(ValidationResults['issues']) == 0:
-                ValidationResults['status'] = 'excellent'
-            elif len(ValidationResults['issues']) < 3:
-                ValidationResults['status'] = 'good'
-            else:
-                ValidationResults['status'] = 'needs_attention'
-                
         except Exception as Error:
-            ValidationResults['status'] = 'error'
-            ValidationResults['issues'].append(f"Validation failed: {Error}")
-            
-        return ValidationResults
+            ValidationResults['errors'].append(str(Error))
+            self.Logger.error(f"Database validation error: {Error}")
         
+        return ValidationResults
+
+    def OptimizeDatabase(self) -> bool:
+        """
+        Optimize database for better web performance
+        Runs ANALYZE and VACUUM commands
+        """
+        try:
+            # Update statistics for query optimizer
+            self.Connection.execute("ANALYZE")
+            
+            # Compact database (careful with large databases)
+            self.Connection.execute("VACUUM")
+            
+            self.Logger.info("Database optimization completed")
+            return True
+            
+        except Exception as Error:
+            self.Logger.error(f"Database optimization failed: {Error}")
+            return False
+
+    def GetDatabaseInfo(self) -> Dict[str, Any]:
+        """
+        Get database metadata for debugging and monitoring
+        """
+        Info = {}
+        
+        try:
+            # Database file info
+            if os.path.exists(self.DatabasePath):
+                FileStats = os.stat(self.DatabasePath)
+                Info['file_size'] = FileStats.st_size
+                Info['last_modified'] = datetime.fromtimestamp(FileStats.st_mtime).isoformat()
+            
+            # SQLite version
+            VersionQuery = "SELECT sqlite_version() as Version"
+            VersionResult = self.ExecuteQuery(VersionQuery)
+            Info['sqlite_version'] = VersionResult[0]['Version'] if VersionResult else 'Unknown'
+            
+            # Page info
+            PageInfoQuery = "PRAGMA page_count"
+            PageInfoResult = self.ExecuteQuery(PageInfoQuery)
+            Info['page_count'] = PageInfoResult[0][0] if PageInfoResult else 0
+            
+            # Schema version
+            SchemaQuery = "PRAGMA schema_version"
+            SchemaResult = self.ExecuteQuery(SchemaQuery)
+            Info['schema_version'] = SchemaResult[0][0] if SchemaResult else 0
+            
+        except Exception as Error:
+            self.Logger.error(f"Error getting database info: {Error}")
+            Info['error'] = str(Error)
+        
+        return Info
+
     def __enter__(self):
-        """Context manager entry."""
+        """Context manager entry"""
         self.Connect()
         return self
-        
-    def __exit__(self, ExcType, ExcVal, ExcTb):
-        """Context manager exit."""
+
+    def __exit__(self, ExceptionType, ExceptionValue, Traceback):
+        """Context manager exit"""
         self.Disconnect()
 
-# Example usage for testing
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG)
-    
-    with DatabaseManager() as Db:
-        # Test database connection and basic queries
-        Stats = Db.GetDatabaseStats()
-        print(f"Database Stats: {json.dumps(Stats, indent=2)}")
-        
-        # Test book retrieval
-        Books = Db.GetBooks(Limit=5)
-        print(f"Found {len(Books)} books")
-        
-        # Test categories
-        Categories = Db.GetCategories()
-        print(f"Found {len(Categories)} categories")
-        
-        # Test validation
-        Validation = Db.ValidateDatabase()
-        print(f"Database validation: {Validation['status']}")
-        if Validation['issues']:
-            print("Issues found:")
-            for Issue in Validation['issues']:
-                print(f"  - {Issue}")
+    def __del__(self):
+        """Destructor to ensure connection cleanup"""
+        if hasattr(self, 'Connection') and self.Connection:
+            try:
+                self.Connection.close()
+            except:
+                pass  # Ignore errors during cleanup

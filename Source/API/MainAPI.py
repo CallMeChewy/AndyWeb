@@ -1,55 +1,67 @@
 # File: MainAPI.py
 # Path: Source/API/MainAPI.py
-# Standard: AIDEV-PascalCase-1.9
+# Standard: AIDEV-PascalCase-2.0
+# Ecosystem Requirement: Backend Python uses PascalCase per project standards
+# Framework: FastAPI with Design Standard v2.0 compliance
+# API Endpoints: REST conventions (lowercase paths) with PascalCase backend functions
+# Database: Raw SQL with PascalCase elements (no SQLAlchemy)
 # Created: 2025-07-07
-# Last Modified: 2025-07-07  04:48PM
+# Last Modified: 2025-07-07  09:16PM
 """
-Description: FastAPI main application for AndyWeb book library system
-Provides REST API endpoints for book browsing, search, and library management.
-Enhanced with robust path handling and proper static file serving.
+Description: Anderson's Library FastAPI Backend - Design Standard v2.0
+Enhanced API supporting both desktop web twin and mobile app interfaces
+Maintains exact desktop functionality while following web ecosystem requirements
 """
 
-from fastapi import FastAPI, HTTPException, Query, Depends
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, StreamingResponse
-from typing import List, Optional, Dict, Any
+import sys
 import logging
 import json
 from pathlib import Path
-import mimetypes
-import io
-import base64
-import os
-import sys
+from typing import List, Dict, Any, Optional, Union
+from datetime import datetime
+import sqlite3
 
-# Configure logging
+from fastapi import FastAPI, HTTPException, Query, Path as FastAPIPath, Request
+from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field, validator
+import uvicorn
+
+# Setup logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 Logger = logging.getLogger(__name__)
 
-# Robust path detection - works regardless of execution context
-def GetProjectPaths():
-    """Get project paths with robust detection."""
+# ==================== PATH CONFIGURATION ====================
+
+def GetProjectPaths() -> Dict[str, Path]:
+    """
+    Get all important project paths using Design Standard v2.0 structure
+    Maintains compatibility with both development and production environments
+    """
     # Get the directory containing this MainAPI.py file
     CurrentFile = Path(__file__).resolve()
     APIDirectory = CurrentFile.parent
     SourceDirectory = APIDirectory.parent
     ProjectRoot = SourceDirectory.parent
     
-    # Define all important paths
+    # Define all important paths following Design Standard v2.0
     Paths = {
         'project_root': ProjectRoot,
         'source_dir': SourceDirectory,
         'api_dir': APIDirectory,
         'webpages_dir': ProjectRoot / 'WebPages',
-        'database_path': ProjectRoot / 'Data' / 'Databases' / 'MyLibraryWeb.db'
+        'database_path': ProjectRoot / 'Data' / 'Databases' / 'MyLibraryWeb.db',
+        'assets_dir': ProjectRoot / 'Assets',
+        'thumbnails_dir': ProjectRoot / 'Data' / 'Thumbs'
     }
     
     Logger.info(f"Project root detected: {Paths['project_root']}")
     Logger.info(f"WebPages directory: {Paths['webpages_dir']}")
+    Logger.info(f"Database path: {Paths['database_path']}")
     
     return Paths
 
@@ -88,16 +100,86 @@ except ImportError as Error:
     Logger.error(f"Python path: {sys.path}")
     raise
 
+# ==================== PYDANTIC MODELS ====================
+
+class BookSearchRequest(BaseModel):
+    """Request model for book search operations"""
+    query: str = Field(..., min_length=1, max_length=200, description="Search query")
+    page: int = Field(default=1, ge=1, description="Page number")
+    limit: int = Field(default=50, ge=1, le=100, description="Items per page") 
+    filters: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional filters")
+    
+    @validator('query')
+    def ValidateQuery(cls, Value):
+        """Validate search query"""
+        if not Value.strip():
+            raise ValueError('Query cannot be empty')
+        return Value.strip()
+
+class BookResponse(BaseModel):
+    """Response model for individual books"""
+    id: int
+    title: str
+    author: Optional[str] = None
+    category: Optional[str] = None
+    subject: Optional[str] = None
+    rating: Optional[int] = None
+    page_count: Optional[int] = None
+    file_size: Optional[int] = None
+    file_path: Optional[str] = None
+    created_date: Optional[str] = None
+    modified_date: Optional[str] = None
+
+class BooksListResponse(BaseModel):
+    """Response model for book lists"""
+    books: List[BookResponse]
+    total: int
+    page: int
+    limit: int
+    has_more: bool
+    message: Optional[str] = None
+
+class CategoryResponse(BaseModel):
+    """Response model for categories"""
+    name: str
+    count: int
+
+class SubjectResponse(BaseModel):
+    """Response model for subjects"""
+    name: str
+    category: Optional[str] = None
+    count: int
+
+class LibraryStatsResponse(BaseModel):
+    """Response model for library statistics"""
+    total_books: int
+    total_categories: int
+    total_subjects: int
+    total_authors: int
+    total_file_size: int
+    average_rating: float
+    last_updated: str
+
+class HealthResponse(BaseModel):
+    """Response model for health check"""
+    status: str
+    timestamp: str
+    version: str
+    database_connected: bool
+    total_books: int
+
+# ==================== FASTAPI APPLICATION ====================
+
 # Initialize FastAPI application
 App = FastAPI(
-    title="AndyWeb Library API",
-    description="REST API for Anderson's Book Library - Web Edition",
-    version="1.0.0",
+    title="Anderson's Library API",
+    description="REST API for Anderson's Book Library - Design Standard v2.0",
+    version="2.0.0",
     docs_url="/api/docs",  # Swagger UI
     redoc_url="/api/redoc"  # ReDoc
 )
 
-# Configure CORS for frontend development
+# Configure CORS for web development
 App.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # In production, specify exact origins
@@ -112,311 +194,497 @@ def GetDatabase() -> DatabaseManager:
     DatabasePath = str(PROJECT_PATHS['database_path'])
     return DatabaseManager(DatabasePath)
 
+# ==================== UTILITY FUNCTIONS ====================
+
+def ConvertBookToResponse(BookRow: sqlite3.Row) -> BookResponse:
+    """
+    Convert database row to BookResponse model
+    Handles null values and type conversions
+    """
+    return BookResponse(
+        id=BookRow['Id'],
+        title=BookRow['Title'] or 'Unknown Title',
+        author=BookRow['Author'],
+        category=BookRow['Category'],
+        subject=BookRow['Subject'],
+        rating=BookRow['Rating'],
+        page_count=BookRow['PageCount'],
+        file_size=BookRow['FileSize'],
+        file_path=BookRow['FilePath'],
+        created_date=BookRow['CreatedDate'],
+        modified_date=BookRow['ModifiedDate']
+    )
+
+def CreatePaginatedResponse(Books: List[BookResponse], Total: int, Page: int, Limit: int, Message: str = None) -> BooksListResponse:
+    """
+    Create paginated response for book lists
+    Calculates has_more flag and formats response
+    """
+    HasMore = (Page * Limit) < Total
+    
+    return BooksListResponse(
+        books=Books,
+        total=Total,
+        page=Page,
+        limit=Limit,
+        has_more=HasMore,
+        message=Message
+    )
+
+# ==================== API ENDPOINTS ====================
+
 # Root endpoint
 @App.get("/")
 async def Root():
     """API root endpoint with basic information."""
     return {
-        "message": "AndyWeb Library API",
-        "version": "1.0.0",
-        "status": "running",
-        "paths": {
-            "project_root": str(PROJECT_PATHS['project_root']),
-            "webpages_available": PROJECT_PATHS['webpages_dir'].exists(),
-            "database_available": PROJECT_PATHS['database_path'].exists()
-        },
+        "name": "Anderson's Library API",
+        "version": "2.0.0",
+        "description": "Design Standard v2.0 compliant library management API",
         "endpoints": {
-            "docs": "/api/docs",
+            "documentation": "/api/docs",
+            "health": "/api/health",
             "books": "/api/books",
+            "search": "/api/books/search",
             "categories": "/api/categories",
             "subjects": "/api/subjects",
             "stats": "/api/stats"
-        }
+        },
+        "author": "Herb Bowers - Project Himalaya",
+        "timestamp": datetime.now().isoformat()
     }
 
 # Health check endpoint
-@App.get("/api/health")
-async def HealthCheck(Db: DatabaseManager = Depends(GetDatabase)):
-    """Health check endpoint for monitoring."""
+@App.get("/api/health", response_model=HealthResponse)
+async def GetHealth():
+    """
+    Health check endpoint for monitoring and debugging
+    Tests database connectivity and returns system status
+    """
     try:
-        with Db:
-            Stats = Db.GetDatabaseStats()
-            return {
-                "status": "healthy",
-                "database": "connected",
-                "total_books": Stats.get('TotalBooks', 0),
-                "webpages_available": PROJECT_PATHS['webpages_dir'].exists()
-            }
+        DatabaseManager = GetDatabase()
+        
+        # Test database connection
+        if DatabaseManager.Connect():
+            # Get book count for health check
+            BookCount = DatabaseManager.GetBookCount()
+            DatabaseConnected = True
+        else:
+            BookCount = 0
+            DatabaseConnected = False
+        
+        return HealthResponse(
+            status="healthy" if DatabaseConnected else "degraded",
+            timestamp=datetime.now().isoformat(),
+            version="2.0.0",
+            database_connected=DatabaseConnected,
+            total_books=BookCount
+        )
+        
     except Exception as Error:
         Logger.error(f"Health check failed: {Error}")
-        raise HTTPException(status_code=503, detail="Service unavailable")
+        return HealthResponse(
+            status="unhealthy",
+            timestamp=datetime.now().isoformat(),
+            version="2.0.0",
+            database_connected=False,
+            total_books=0
+        )
 
-# Books endpoints
-@App.get("/api/books")
+# Get all books with pagination
+@App.get("/api/books", response_model=BooksListResponse)
 async def GetBooks(
-    limit: int = Query(50, ge=1, le=200, description="Number of books to return"),
-    offset: int = Query(0, ge=0, description="Number of books to skip"),
-    search: Optional[str] = Query(None, description="Search term for title/author"),
-    category_id: Optional[int] = Query(None, description="Filter by category ID"),
-    subject_id: Optional[int] = Query(None, description="Filter by subject ID"),
-    Db: DatabaseManager = Depends(GetDatabase)
-) -> Dict[str, Any]:
-    """Get books with optional filtering and pagination."""
+    page: int = Query(default=1, ge=1, description="Page number"),
+    limit: int = Query(default=50, ge=1, le=100, description="Items per page")
+):
+    """
+    Get paginated list of all books
+    Maintains exact desktop functionality with web optimization
+    """
     try:
-        with Db:
-            Books = Db.GetBooks(
-                Limit=limit,
-                Offset=offset,
-                SearchTerm=search or "",
-                CategoryId=category_id,
-                SubjectId=subject_id
-            )
-            
-            # Convert thumbnail data for JSON response
-            for Book in Books:
-                if Book.get('ThumbnailImage'):
-                    # Convert BLOB to base64 for frontend
-                    ThumbnailBytes = Book['ThumbnailImage']
-                    if isinstance(ThumbnailBytes, bytes):
-                        Book['ThumbnailImage'] = base64.b64encode(ThumbnailBytes).decode('utf-8')
-                        Book['HasThumbnail'] = True
-                    else:
-                        Book['ThumbnailImage'] = None
-                        Book['HasThumbnail'] = False
-                else:
-                    Book['HasThumbnail'] = False
-            
-            return {
-                "books": Books,
-                "pagination": {
-                    "limit": limit,
-                    "offset": offset,
-                    "count": len(Books),
-                    "has_more": len(Books) == limit
-                },
-                "filters": {
-                    "search": search,
-                    "category_id": category_id,
-                    "subject_id": subject_id
-                }
-            }
-            
+        DatabaseManager = GetDatabase()
+        
+        if not DatabaseManager.Connect():
+            raise HTTPException(status_code=503, detail="Database connection failed")
+        
+        # Calculate offset for pagination
+        Offset = (page - 1) * limit
+        
+        # Get books with pagination
+        BooksData = DatabaseManager.GetBooksWithPagination(limit, Offset)
+        TotalBooks = DatabaseManager.GetBookCount()
+        
+        # Convert to response models
+        Books = [ConvertBookToResponse(BookRow) for BookRow in BooksData]
+        
+        return CreatePaginatedResponse(Books, TotalBooks, page, limit)
+        
     except Exception as Error:
         Logger.error(f"Error getting books: {Error}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve books")
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve books: {str(Error)}")
 
-@App.get("/api/books/{book_id}")
-async def GetBookById(book_id: int, Db: DatabaseManager = Depends(GetDatabase)):
-    """Get detailed information for a specific book."""
+# Search books
+@App.post("/api/books/search", response_model=BooksListResponse)
+async def SearchBooks(SearchRequest: BookSearchRequest):
+    """
+    Search books with Google-type instant search functionality
+    Supports filtering by category, subject, rating
+    """
     try:
-        with Db:
-            Book = Db.GetBookById(book_id)
-            
-            if not Book:
-                raise HTTPException(status_code=404, detail="Book not found")
-                
-            # Process thumbnail for response
-            if Book.get('ThumbnailImage'):
-                ThumbnailBytes = Book['ThumbnailImage']
-                if isinstance(ThumbnailBytes, bytes):
-                    Book['ThumbnailImage'] = base64.b64encode(ThumbnailBytes).decode('utf-8')
-                    Book['HasThumbnail'] = True
-                else:
-                    Book['ThumbnailImage'] = None
-                    Book['HasThumbnail'] = False
-            else:
-                Book['HasThumbnail'] = False
-                
-            # Update last opened timestamp
-            Db.UpdateBookLastOpened(book_id)
-            
-            return {"book": Book}
-            
+        DatabaseManager = GetDatabase()
+        
+        if not DatabaseManager.Connect():
+            raise HTTPException(status_code=503, detail="Database connection failed")
+        
+        # Calculate offset
+        Offset = (SearchRequest.page - 1) * SearchRequest.limit
+        
+        # Perform search
+        BooksData = DatabaseManager.SearchBooks(
+            SearchQuery=SearchRequest.query,
+            Category=SearchRequest.filters.get('category'),
+            Subject=SearchRequest.filters.get('subject'),
+            MinRating=SearchRequest.filters.get('rating', 0),
+            Limit=SearchRequest.limit,
+            Offset=Offset
+        )
+        
+        # Get total count for pagination
+        TotalCount = DatabaseManager.GetSearchResultCount(
+            SearchQuery=SearchRequest.query,
+            Category=SearchRequest.filters.get('category'),
+            Subject=SearchRequest.filters.get('subject'),
+            MinRating=SearchRequest.filters.get('rating', 0)
+        )
+        
+        # Convert to response models
+        Books = [ConvertBookToResponse(BookRow) for BookRow in BooksData]
+        
+        Message = f"Search results for '{SearchRequest.query}'"
+        return CreatePaginatedResponse(Books, TotalCount, SearchRequest.page, SearchRequest.limit, Message)
+        
+    except Exception as Error:
+        Logger.error(f"Error searching books: {Error}")
+        raise HTTPException(status_code=500, detail=f"Search failed: {str(Error)}")
+
+# Filter books by category/subject/rating
+@App.get("/api/books/filter", response_model=BooksListResponse)
+async def FilterBooks(
+    category: Optional[str] = Query(default=None, description="Filter by category"),
+    subject: Optional[str] = Query(default=None, description="Filter by subject"),
+    min_rating: Optional[int] = Query(default=None, ge=0, le=5, description="Minimum rating"),
+    page: int = Query(default=1, ge=1, description="Page number"),
+    limit: int = Query(default=50, ge=1, le=100, description="Items per page")
+):
+    """
+    Filter books by category, subject, and/or rating
+    Maintains exact desktop filter functionality
+    """
+    try:
+        DatabaseManager = GetDatabase()
+        
+        if not DatabaseManager.Connect():
+            raise HTTPException(status_code=503, detail="Database connection failed")
+        
+        # Calculate offset
+        Offset = (page - 1) * limit
+        
+        # Apply filters
+        BooksData = DatabaseManager.GetBooksByFilters(
+            Category=category,
+            Subject=subject,
+            MinRating=min_rating or 0,
+            Limit=limit,
+            Offset=Offset
+        )
+        
+        # Get total count
+        TotalCount = DatabaseManager.GetFilteredBookCount(
+            Category=category,
+            Subject=subject,
+            MinRating=min_rating or 0
+        )
+        
+        # Convert to response models
+        Books = [ConvertBookToResponse(BookRow) for BookRow in BooksData]
+        
+        # Create descriptive message
+        FilterParts = []
+        if category:
+            FilterParts.append(f"Category: {category}")
+        if subject:
+            FilterParts.append(f"Subject: {subject}")
+        if min_rating:
+            FilterParts.append(f"Rating: {min_rating}+ stars")
+        
+        Message = f"Filtered by {', '.join(FilterParts)}" if FilterParts else "All books"
+        
+        return CreatePaginatedResponse(Books, TotalCount, page, limit, Message)
+        
+    except Exception as Error:
+        Logger.error(f"Error filtering books: {Error}")
+        raise HTTPException(status_code=500, detail=f"Filter failed: {str(Error)}")
+
+# Get single book by ID
+@App.get("/api/books/{book_id}", response_model=BookResponse)
+async def GetBook(book_id: int = FastAPIPath(..., description="Book ID")):
+    """Get detailed information for a specific book"""
+    try:
+        DatabaseManager = GetDatabase()
+        
+        if not DatabaseManager.Connect():
+            raise HTTPException(status_code=503, detail="Database connection failed")
+        
+        BookData = DatabaseManager.GetBookById(book_id)
+        
+        if not BookData:
+            raise HTTPException(status_code=404, detail="Book not found")
+        
+        return ConvertBookToResponse(BookData)
+        
     except HTTPException:
         raise
     except Exception as Error:
         Logger.error(f"Error getting book {book_id}: {Error}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve book")
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve book: {str(Error)}")
 
-# Categories endpoints
-@App.get("/api/categories")
-async def GetCategories(Db: DatabaseManager = Depends(GetDatabase)):
-    """Get all categories with book counts."""
-    try:
-        with Db:
-            Categories = Db.GetCategories()
-            return {"categories": Categories}
-            
-    except Exception as Error:
-        Logger.error(f"Error getting categories: {Error}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve categories")
-
-# Subjects endpoints
-@App.get("/api/subjects")
-async def GetSubjects(
-    category_id: Optional[int] = Query(None, description="Filter by category ID"),
-    Db: DatabaseManager = Depends(GetDatabase)
-):
-    """Get subjects, optionally filtered by category."""
-    try:
-        with Db:
-            Subjects = Db.GetSubjects(CategoryId=category_id)
-            return {"subjects": Subjects}
-            
-    except Exception as Error:
-        Logger.error(f"Error getting subjects: {Error}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve subjects")
-
-# Statistics endpoint
-@App.get("/api/stats")
-async def GetStats(Db: DatabaseManager = Depends(GetDatabase)):
-    """Get database statistics and recent activity."""
-    try:
-        with Db:
-            Stats = Db.GetDatabaseStats()
-            return {"stats": Stats}
-            
-    except Exception as Error:
-        Logger.error(f"Error getting stats: {Error}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve statistics")
-
-# File serving endpoint (for PDF files when locally available)
-@App.get("/api/books/{book_id}/file")
-async def ServeBookFile(book_id: int, Db: DatabaseManager = Depends(GetDatabase)):
-    """Serve book file for reading (when available locally)."""
-    try:
-        with Db:
-            Book = Db.GetBookById(book_id)
-            
-            if not Book:
-                raise HTTPException(status_code=404, detail="Book not found")
-                
-            FilePath = Path(Book.get('FilePath', ''))
-            
-            # Check if file exists locally
-            if not FilePath.exists():
-                raise HTTPException(
-                    status_code=404, 
-                    detail="Book file not found. May require cloud access."
-                )
-                
-            # Determine content type
-            ContentType, _ = mimetypes.guess_type(str(FilePath))
-            if not ContentType:
-                ContentType = 'application/octet-stream'
-                
-            # Stream file response
-            def FileIterator():
-                with open(FilePath, 'rb') as FileHandle:
-                    while True:
-                        Chunk = FileHandle.read(8192)  # 8KB chunks
-                        if not Chunk:
-                            break
-                        yield Chunk
-                        
-            return StreamingResponse(
-                FileIterator(),
-                media_type=ContentType,
-                headers={
-                    "Content-Disposition": f"inline; filename=\"{FilePath.name}\"",
-                    "Cache-Control": "public, max-age=3600"
-                }
-            )
-            
-    except HTTPException:
-        raise
-    except Exception as Error:
-        Logger.error(f"Error serving file for book {book_id}: {Error}")
-        raise HTTPException(status_code=500, detail="Failed to serve book file")
-
-# Thumbnail endpoint
+# Get book thumbnail
 @App.get("/api/books/{book_id}/thumbnail")
-async def GetBookThumbnail(book_id: int, Db: DatabaseManager = Depends(GetDatabase)):
-    """Get book thumbnail image."""
+async def GetBookThumbnail(book_id: int = FastAPIPath(..., description="Book ID")):
+    """
+    Get book thumbnail image
+    Returns image file or 404 if not found
+    """
     try:
-        with Db:
-            Book = Db.GetBookById(book_id)
-            
-            if not Book or not Book.get('ThumbnailImage'):
-                raise HTTPException(status_code=404, detail="Thumbnail not found")
-                
-            ThumbnailBytes = Book['ThumbnailImage']
-            if not isinstance(ThumbnailBytes, bytes):
-                raise HTTPException(status_code=404, detail="Invalid thumbnail data")
-                
-            return StreamingResponse(
-                io.BytesIO(ThumbnailBytes),
+        # Look for thumbnail in thumbnails directory
+        ThumbnailPath = PROJECT_PATHS['thumbnails_dir'] / f"book_{book_id}.jpg"
+        
+        if ThumbnailPath.exists():
+            return FileResponse(
+                path=str(ThumbnailPath),
                 media_type="image/jpeg",
-                headers={
-                    "Cache-Control": "public, max-age=86400"  # Cache for 24 hours
-                }
+                headers={"Cache-Control": "max-age=3600"}  # Cache for 1 hour
             )
-            
+        
+        # Try alternative formats
+        for Extension in ['.png', '.gif', '.webp']:
+            AlternatePath = PROJECT_PATHS['thumbnails_dir'] / f"book_{book_id}{Extension}"
+            if AlternatePath.exists():
+                MediaType = f"image/{Extension[1:]}"
+                return FileResponse(
+                    path=str(AlternatePath),
+                    media_type=MediaType,
+                    headers={"Cache-Control": "max-age=3600"}
+                )
+        
+        # No thumbnail found
+        raise HTTPException(status_code=404, detail="Thumbnail not found")
+        
     except HTTPException:
         raise
     except Exception as Error:
         Logger.error(f"Error getting thumbnail for book {book_id}: {Error}")
         raise HTTPException(status_code=500, detail="Failed to retrieve thumbnail")
 
-# Mount static files with robust path handling
-try:
-    WebPagesPath = PROJECT_PATHS['webpages_dir']
-    if WebPagesPath.exists():
-        App.mount("/static", StaticFiles(directory=str(WebPagesPath)), name="static")
-        Logger.info(f"✅ Static files mounted: {WebPagesPath}")
-    else:
-        Logger.warning(f"⚠️ WebPages directory not found, static files not mounted: {WebPagesPath}")
-except Exception as Error:
-    Logger.error(f"❌ Failed to mount static files: {Error}")
-
-# Serve main frontend page with path validation
-@App.get("/app")
-async def ServeFrontend():
-    """Serve the main frontend application."""
+# Get categories
+@App.get("/api/categories", response_model=List[CategoryResponse])
+async def GetCategories():
+    """
+    Get all categories with book counts
+    Used for populating dropdown filters
+    """
     try:
-        IndexPath = PROJECT_PATHS['webpages_dir'] / 'index.html'
+        DatabaseManager = GetDatabase()
         
-        if not IndexPath.exists():
-            Logger.error(f"Frontend index.html not found: {IndexPath}")
-            raise HTTPException(
-                status_code=404, 
-                detail=f"Frontend not available. Expected: {IndexPath}"
-            )
-            
-        return FileResponse(str(IndexPath))
+        if not DatabaseManager.Connect():
+            raise HTTPException(status_code=503, detail="Database connection failed")
         
-    except HTTPException:
-        raise
+        CategoriesData = DatabaseManager.GetCategoriesWithCounts()
+        
+        Categories = [
+            CategoryResponse(name=Row['Category'], count=Row['BookCount'])
+            for Row in CategoriesData
+            if Row['Category']  # Filter out null categories
+        ]
+        
+        return Categories
+        
     except Exception as Error:
-        Logger.error(f"Error serving frontend: {Error}")
-        raise HTTPException(status_code=500, detail="Failed to serve frontend")
+        Logger.error(f"Error getting categories: {Error}")
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve categories: {str(Error)}")
 
-# Startup event to validate environment
+# Get subjects
+@App.get("/api/subjects", response_model=List[SubjectResponse])
+async def GetSubjects(category_id: Optional[str] = Query(default=None, description="Filter by category")):
+    """
+    Get all subjects with book counts
+    Optionally filtered by category
+    """
+    try:
+        DatabaseManager = GetDatabase()
+        
+        if not DatabaseManager.Connect():
+            raise HTTPException(status_code=503, detail="Database connection failed")
+        
+        if category_id:
+            SubjectsData = DatabaseManager.GetSubjectsByCategory(category_id)
+        else:
+            SubjectsData = DatabaseManager.GetSubjectsWithCounts()
+        
+        Subjects = [
+            SubjectResponse(
+                name=Row['Subject'], 
+                category=Row.get('Category'),
+                count=Row['BookCount']
+            )
+            for Row in SubjectsData
+            if Row['Subject']  # Filter out null subjects
+        ]
+        
+        return Subjects
+        
+    except Exception as Error:
+        Logger.error(f"Error getting subjects: {Error}")
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve subjects: {str(Error)}")
+
+# Get library statistics
+@App.get("/api/stats", response_model=LibraryStatsResponse)
+async def GetLibraryStats():
+    """
+    Get comprehensive library statistics
+    Used for dashboard and status display
+    """
+    try:
+        DatabaseManager = GetDatabase()
+        
+        if not DatabaseManager.Connect():
+            raise HTTPException(status_code=503, detail="Database connection failed")
+        
+        Stats = DatabaseManager.GetLibraryStatistics()
+        
+        return LibraryStatsResponse(
+            total_books=Stats.get('TotalBooks', 0),
+            total_categories=Stats.get('TotalCategories', 0),
+            total_subjects=Stats.get('TotalSubjects', 0),
+            total_authors=Stats.get('TotalAuthors', 0),
+            total_file_size=Stats.get('TotalFileSize', 0),
+            average_rating=Stats.get('AverageRating', 0.0),
+            last_updated=datetime.now().isoformat()
+        )
+        
+    except Exception as Error:
+        Logger.error(f"Error getting library stats: {Error}")
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve statistics: {str(Error)}")
+
+# ==================== STATIC FILE SERVING ====================
+
+# Mount static files for web interface
+if PROJECT_PATHS['webpages_dir'].exists():
+    App.mount("/app", StaticFiles(directory=str(PROJECT_PATHS['webpages_dir']), html=True), name="webapp")
+    Logger.info("✅ Web application mounted at /app")
+
+if PROJECT_PATHS['assets_dir'].exists():
+    App.mount("/assets", StaticFiles(directory=str(PROJECT_PATHS['assets_dir'])), name="assets")
+    Logger.info("✅ Assets mounted at /assets")
+
+# Serve main application at root
+@App.get("/app")
+async def ServeApp():
+    """Serve the main web application"""
+    WebAppPath = PROJECT_PATHS['webpages_dir'] / 'desktop-library.html'
+    if WebAppPath.exists():
+        return FileResponse(str(WebAppPath))
+    else:
+        raise HTTPException(status_code=404, detail="Web application not found")
+
+@App.get("/mobile")
+async def ServeMobileApp():
+    """Serve the mobile web application"""
+    MobileAppPath = PROJECT_PATHS['webpages_dir'] / 'mobile-library.html'
+    if MobileAppPath.exists():
+        return FileResponse(str(MobileAppPath))
+    else:
+        raise HTTPException(status_code=404, detail="Mobile application not found")
+
+# ==================== ERROR HANDLERS ====================
+
+@App.exception_handler(404)
+async def NotFoundHandler(request: Request, exc: HTTPException):
+    """Custom 404 handler with helpful information"""
+    return JSONResponse(
+        status_code=404,
+        content={
+            "error": "Not Found",
+            "message": "The requested resource was not found",
+            "path": str(request.url.path),
+            "available_endpoints": [
+                "/api/docs",
+                "/api/books",
+                "/api/categories", 
+                "/api/subjects",
+                "/api/stats",
+                "/app",
+                "/mobile"
+            ]
+        }
+    )
+
+@App.exception_handler(500)
+async def InternalServerErrorHandler(request: Request, exc: Exception):
+    """Custom 500 handler with error logging"""
+    Logger.error(f"Internal server error: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "Internal Server Error",
+            "message": "An unexpected error occurred",
+            "timestamp": datetime.now().isoformat()
+        }
+    )
+
+# ==================== STARTUP EVENTS ====================
+
 @App.on_event("startup")
 async def StartupEvent():
-    """Validate environment on startup."""
-    Logger.info("🚀 AndyWeb API starting up...")
-    Logger.info(f"📁 Project root: {PROJECT_PATHS['project_root']}")
-    Logger.info(f"🌐 WebPages dir: {PROJECT_PATHS['webpages_dir']} (exists: {PROJECT_PATHS['webpages_dir'].exists()})")
-    Logger.info(f"🗃️ Database: {PROJECT_PATHS['database_path']} (exists: {PROJECT_PATHS['database_path'].exists()})")
+    """Application startup tasks"""
+    Logger.info("🚀 Anderson's Library API v2.0 starting up...")
+    Logger.info("📊 Design Standard v2.0 compliant")
+    Logger.info(f"🗄️ Database: {PROJECT_PATHS['database_path']}")
+    Logger.info(f"🌐 Web App: {PROJECT_PATHS['webpages_dir']}")
     
     # Test database connection
     try:
-        TestDb = DatabaseManager(str(PROJECT_PATHS['database_path']))
-        with TestDb:
-            Stats = TestDb.GetDatabaseStats()
-            Logger.info(f"📚 Database connected: {Stats.get('TotalBooks', 0)} books found")
+        DatabaseManager = GetDatabase()
+        if DatabaseManager.Connect():
+            BookCount = DatabaseManager.GetBookCount()
+            Logger.info(f"✅ Database connected successfully - {BookCount} books loaded")
+        else:
+            Logger.warning("⚠️ Database connection failed")
     except Exception as Error:
-        Logger.error(f"❌ Database connection failed: {Error}")
+        Logger.error(f"❌ Database startup error: {Error}")
 
-if __name__ == "__main__":
-    import uvicorn
-    
-    Logger.info("Starting AndyWeb API server...")
+@App.on_event("shutdown")
+async def ShutdownEvent():
+    """Application shutdown tasks"""
+    Logger.info("🛑 Anderson's Library API v2.0 shutting down...")
+
+# ==================== DEVELOPMENT SERVER ====================
+
+def RunDevelopmentServer():
+    """
+    Run the development server with hot reload
+    Design Standard v2.0 compliant configuration
+    """
     uvicorn.run(
         "MainAPI:App",
         host="127.0.0.1",
-        port=8000,
-        reload=True,  # Auto-reload during development
-        log_level="info"
+        port=8001,
+        reload=True,
+        reload_dirs=[str(PROJECT_PATHS['source_dir'])],
+        log_level="info",
+        access_log=True
     )
+
+if __name__ == "__main__":
+    Logger.info("Starting Anderson's Library API v2.0 - Design Standard v2.0")
+    RunDevelopmentServer()
