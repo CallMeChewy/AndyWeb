@@ -229,26 +229,26 @@ def CreatePaginatedResponse(Books: List[BookResponse], Total: int, Page: int, Li
 
 # ==================== API ENDPOINTS ====================
 
-# Root endpoint
-@App.get("/")
-async def Root():
-    """API root endpoint with basic information."""
-    return {
-        "name": "Anderson's Library API",
-        "version": "2.0.0",
-        "description": "Design Standard v2.0 compliant library management API",
-        "endpoints": {
-            "documentation": "/api/docs",
-            "health": "/api/health",
-            "books": "/api/books",
-            "search": "/api/books/search",
-            "categories": "/api/categories",
-            "subjects": "/api/subjects",
-            "stats": "/api/stats"
-        },
-        "author": "Herb Bowers - Project Himalaya",
-        "timestamp": datetime.now().isoformat()
-    }
+# Root endpoint - Commented out to allow StaticFiles to serve index.html
+# @App.get("/")
+# async def Root():
+#     """API root endpoint with basic information."""
+#     return {
+#         "name": "Anderson's Library API",
+#         "version": "2.0.0",
+#         "description": "Design Standard v2.0 compliant library management API",
+#         "endpoints": {
+#             "documentation": "/api/docs",
+#             "health": "/api/health",
+#             "books": "/api/books",
+#             "search": "/api/books/search",
+#             "categories": "/api/categories",
+#             "subjects": "/api/subjects",
+#             "stats": "/api/stats"
+#         },
+#         "author": "Herb Bowers - Project Himalaya",
+#         "timestamp": datetime.now().isoformat()
+#     }
 
 # Health check endpoint
 @App.get("/api/health", response_model=HealthResponse)
@@ -651,31 +651,12 @@ async def ShutdownServer():
 
 # Mount static files for web interface
 if PROJECT_PATHS['webpages_dir'].exists():
-    App.mount("/app", StaticFiles(directory=str(PROJECT_PATHS['webpages_dir']), html=True), name="webapp")
-    Logger.info("✅ Web application mounted at /app")
+    App.mount("/", StaticFiles(directory=str(PROJECT_PATHS['webpages_dir']), html=True), name="webapp")
+    Logger.info("✅ Web application mounted at /")
 
 if PROJECT_PATHS['assets_dir'].exists():
     App.mount("/assets", StaticFiles(directory=str(PROJECT_PATHS['assets_dir'])), name="assets")
     Logger.info("✅ Assets mounted at /assets")
-
-# Serve main application at root
-@App.get("/app")
-async def ServeApp():
-    """Serve the main web application"""
-    WebAppPath = PROJECT_PATHS['webpages_dir'] / 'desktop-library.html'
-    if WebAppPath.exists():
-        return FileResponse(str(WebAppPath))
-    else:
-        raise HTTPException(status_code=404, detail="Web application not found")
-
-@App.get("/mobile")
-async def ServeMobileApp():
-    """Serve the mobile web application"""
-    MobileAppPath = PROJECT_PATHS['webpages_dir'] / 'mobile-library.html'
-    if MobileAppPath.exists():
-        return FileResponse(str(MobileAppPath))
-    else:
-        raise HTTPException(status_code=404, detail="Mobile application not found")
 
 # ==================== ERROR HANDLERS ====================
 

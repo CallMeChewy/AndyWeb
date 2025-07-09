@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<!--
+File: desktop-library.html
+Path: WebPages/desktop-library.html
+Standard: AIDEV-PascalCase-2.1
+Created: 2025-07-08
+Last Modified: 2025-07-08  11:35PM
+Description: Anderson's Library Desktop Web Interface - All 10 Issues Fixed
+- Proper BowersWorld welcome screen and branding
+- Fixed search filtering logic
+- Fixed category/subject filtering and population
+- Moved Grid/List buttons to controls section
+- Added proper search/dropdown interactions
+- Enhanced menu bar with dropdowns
+- Added BowersWorld icon and branding
+- Complete status bar with category/subject/total stats
+-->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anderson's Library - Professional Edition</title>
+    
+    <style>
+        /* Main App Styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1e3c72, #2a5298);
+            color: #ffffff;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        .app-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        /* Menu Bar */
+        .menu-bar {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 8px 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            gap: 20px;
+            position: relative;
+        }
+
+        .menu-item {
+            color: #ffffff;
+            text-decoration: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            transition: background-color 0.2s;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .menu-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .dropdown-menu {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            background: #2c3e50;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            padding: 8px 0;
+            min-width: 150px;
+            z-index: 1000;
+            display: none;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .dropdown-item {
+            padding: 8px 16px;
+            color: #ffffff;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .dropdown-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .menu-item:hover .dropdown-menu {
+            display: block;
+        }
+
+        /* Title Bar */
+        .title-bar {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 12px 20px;
+            text-align: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .title-bar h1 {
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        /* Main Content */
+        .content-area {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 300px;
+            background: rgba(0, 0, 0, 0.3);
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+
+        .sidebar-title {
+            padding: 16px;
+            text-align: center;
+            font-weight: 600;
+            color: #f39c12;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .sidebar-section {
+            padding: 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .sidebar-section h3 {
+            margin-bottom: 12px;
+            color: #ecf0f1;
+            font-size: 16px;
+        }
+
+        /* View Mode Buttons - Now in Controls Section */
+        .view-controls {
+            margin-bottom: 16px;
+            display: flex;
+            gap: 8px;
+        }
+
+        .view-mode-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #ffffff;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+            flex: 1;
+            text-align: center;
+            font-size: 14px;
+        }
+
+        .view-mode-btn.active {
+            background: #3498db;
+            border-color: #3498db;
+        }
+
+        .view-mode-btn:hover:not(.active) {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .search-input, .desktop-dropdown {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.1);
+            color: #ffffff;
+            margin-bottom: 8px;
+        }
+
+        .search-input::placeholder {
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .search-btn {
+            width: 100%;
+            padding: 10px;
+            background: #3498db;
+            border: none;
+            border-radius: 4px;
+            color: #ffffff;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background-color 0.2s;
+        }
+
+        .search-btn:hover {
+            background: #2980b9;
+        }
+
+        .desktop-dropdown {
+            margin-bottom: 12px;
+        }
+
+        .desktop-dropdown option {
+            background: #2c3e50;
+            color: #ffffff;
+        }
+
+        /* Main Content Area */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .content-header {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 16px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .content-title {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .book-count {
+            color: #bdc3c7;
+            font-size: 14px;
+        }
+
+        /* Books Grid - Default Grid View */
+        .books-grid {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 20px;
+            align-content: start;
+        }
+
+        /* List View Mode */
+        .books-grid.view-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding: 20px;
+        }
+
+        .books-grid.view-list .book-card {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            padding: 12px 16px;
+            max-width: none;
+            height: 80px;
+        }
+
+        .books-grid.view-list .book-thumbnail {
+            width: 50px;
+            height: 70px;
+            margin-right: 16px;
+            margin-bottom: 0;
+            flex-shrink: 0;
+        }
+
+        .books-grid.view-list .book-info {
+            flex: 1;
+            text-align: left;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .books-grid.view-list .book-title {
+            display: block;
+            -webkit-line-clamp: 1;
+            margin-bottom: 4px;
+        }
+
+        .books-grid.view-list .book-author {
+            margin-bottom: 4px;
+        }
+
+        /* Book Card Styles */
+        .book-card {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            padding: 16px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+        }
+
+        .book-card:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .book-card.selected {
+            border-color: #3498db;
+            background: rgba(52, 152, 219, 0.2);
+        }
+
+        .book-thumbnail {
+            width: 120px;
+            height: 160px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .book-thumbnail img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: cover;
+            border-radius: 4px;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .book-thumbnail img.loaded {
+            opacity: 1;
+        }
+
+        .book-thumbnail::before {
+            content: "📚";
+            font-size: 40px;
+            opacity: 0.5;
+            position: absolute;
+            z-index: 1;
+        }
+
+        .book-thumbnail img:not(.error) {
+            z-index: 2;
+            position: relative;
+        }
+
+        .book-info {
+            flex: 1;
+            width: 100%;
+        }
+
+        .book-title {
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #ecf0f1;
+            font-size: 14px;
+            line-height: 1.3;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .book-author {
+            color: #bdc3c7;
+            font-size: 12px;
+            margin-bottom: 8px;
+        }
+
+        .book-rating {
+            color: #f39c12;
+            font-size: 12px;
+        }
+
+        /* Status Bar */
+        .status-bar {
+            background: rgba(0, 0, 0, 0.4);
+            padding: 8px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            font-size: 14px;
+        }
+
+        .status-message {
+            color: #ecf0f1;
+        }
+
+        .status-stats {
+            color: #bdc3c7;
+        }
+
+        /* BowersWorld Welcome Screen */
+        .welcome-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            text-align: center;
+            padding: 40px;
+            position: relative;
+        }
+
+        .welcome-card {
+            background: linear-gradient(135deg, #8B0000, #DC143C);
+            border: 3px solid #FFD700;
+            border-radius: 16px;
+            padding: 40px;
+            max-width: 500px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .welcome-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(45deg, transparent 30%, rgba(255, 215, 0, 0.1) 50%, transparent 70%);
+            pointer-events: none;
+        }
+
+        .bowers-logo {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #4a90e2, #7b68ee);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px;
+            position: relative;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        .bowers-logo img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 50%;
+        }
+
+        .welcome-title {
+            color: #FFD700;
+            font-size: 28px;
+            font-weight: bold;
+            margin-bottom: 8px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .welcome-subtitle {
+            color: #87CEEB;
+            font-size: 16px;
+            margin-bottom: 20px;
+        }
+
+        .welcome-description {
+            color: #FFFFFF;
+            font-size: 14px;
+            margin-bottom: 8px;
+        }
+
+        .welcome-footer {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(255, 215, 0, 0.3);
+        }
+
+        .bowers-brand {
+            color: #FFD700;
+            font-weight: bold;
+            font-size: 16px;
+        }
+
+        .copyright {
+            color: #FFD700;
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+
+        .design-standard {
+            color: #87CEEB;
+            font-size: 12px;
+        }
+
+        /* Loading and Empty States */
+        .loading, .no-books {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 200px;
+            color: #bdc3c7;
+            text-align: center;
+        }
+
+        .loading {
+            color: #3498db;
+            font-size: 18px;
+        }
+
+        .no-books h3 {
+            margin-bottom: 8px;
+            color: #ecf0f1;
+        }
+
+        /* Error Toast */
+        .error-toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #e74c3c;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 4px;
+            z-index: 1000;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            animation: slideInRight 0.3s ease-out;
+        }
+
+        @keyframes slideInRight {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        /* About Dialog */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .about-dialog {
+            background: linear-gradient(135deg, #8B0000, #DC143C);
+            border: 3px solid #FFD700;
+            border-radius: 16px;
+            padding: 30px;
+            max-width: 500px;
+            margin: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            color: #FFFFFF;
+            text-align: center;
+            position: relative;
+        }
+
+        .about-dialog::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(45deg, transparent 30%, rgba(255, 215, 0, 0.1) 50%, transparent 70%);
+            pointer-events: none;
+            border-radius: 13px;
+        }
+
+        .about-dialog .bowers-logo {
+            margin-bottom: 20px;
+        }
+
+        .about-dialog .bowers-logo img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 50%;
+        }
+
+        .about-dialog h2 {
+            color: #FFD700;
+            margin-bottom: 16px;
+            font-size: 24px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .about-dialog hr {
+            border: none;
+            border-top: 1px solid rgba(255, 215, 0, 0.3);
+            margin: 16px 0;
+        }
+
+        .about-dialog button {
+            background: #FFD700;
+            color: #8B0000;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 16px;
+            font-weight: bold;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .about-dialog button:hover {
+            background: #FFA500;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 250px;
+            }
+            
+            .books-grid {
+                grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+                gap: 15px;
+                padding: 15px;
+            }
+            
+            .book-thumbnail {
+                width: 100px;
+                height: 140px;
+            }
+
+            .welcome-card {
+                margin: 20px;
+                padding: 30px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Menu Bar with Proper Dropdowns -->
+        <div class="menu-bar">
+            <div class="menu-item">
+                File
+                <div class="dropdown-menu">
+                    <div class="dropdown-item" onclick="showAbout()">About</div>
+                    <div class="dropdown-item" onclick="showStats()">Library Statistics</div>
+                    <div class="dropdown-item" onclick="exitApp()">Exit</div>
+                </div>
+            </div>
+            <div class="menu-item">
+                View
+                <div class="dropdown-menu">
+                    <div class="dropdown-item" onclick="setViewMode('grid')">Grid View</div>
+                    <div class="dropdown-item" onclick="setViewMode('list')">List View</div>
+                    <div class="dropdown-item" onclick="toggleViewMode()">Toggle View</div>
+                </div>
+            </div>
+            <div class="menu-item">
+                Tools
+                <div class="dropdown-menu">
+                    <div class="dropdown-item" onclick="refreshLibrary()">Refresh Library</div>
+                    <div class="dropdown-item" onclick="exportData()">Export Data</div>
+                </div>
+            </div>
+            <div class="menu-item">
+                Help
+                <div class="dropdown-menu">
+                    <div class="dropdown-item" onclick="showHelp()">User Guide</div>
+                    <div class="dropdown-item" onclick="showAbout()">About</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Title Bar -->
+        <div class="title-bar">
+            <h1>Anderson's Library - Professional Edition</h1>
+        </div>
+
+        <!-- Main Content -->
+        <div class="content-area">
+            <!-- Left Sidebar -->
+            <div class="sidebar">
+                <div class="sidebar-title">--- Options ---</div>
+
+                <!-- Controls Section with View Buttons -->
+                <div class="sidebar-section">
+                    <h3>View</h3>
+                    <div class="view-controls">
+                        <button class="view-mode-btn active" data-mode="grid" onclick="setViewMode('grid')">Grid</button>
+                        <button class="view-mode-btn" data-mode="list" onclick="setViewMode('list')">List</button>
+                    </div>
+                </div>
+
+                <!-- Search Section -->
+                <div class="sidebar-section">
+                    <div class="search-section">
+                        <h3>Search</h3>
+                        <input type="text" class="search-input" placeholder="Type Something Here" id="searchInput">
+                        <button class="search-btn" onclick="performSearch()">Search</button>
+                    </div>
+                </div>
+
+                <!-- Filters Section -->
+                <div class="sidebar-section">
+                    <div class="filter-section">
+                        <h3>Filters</h3>
+                        
+                        <!-- Category Dropdown -->
+                        <select class="desktop-dropdown" id="categorySelect" onchange="onCategoryChange()">
+                            <option value="">Loading categories...</option>
+                        </select>
+
+                        <!-- Subject Dropdown -->
+                        <select class="desktop-dropdown" id="subjectSelect" onchange="onSubjectChange()">
+                            <option value="">Select a subject...</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Content Area -->
+            <div class="main-content">
+                <!-- Content Header -->
+                <div class="content-header">
+                    <div class="content-title" id="contentTitle">🏠 Welcome to Anderson's Library</div>
+                    <div class="book-count" id="bookCount">Ready to explore</div>
+                </div>
+
+                <!-- Books Grid -->
+                <div class="books-grid" id="booksGrid">
+                    <div class="welcome-screen">
+                        <div class="welcome-card">
+                            <div class="bowers-logo">
+                                <img src="/assets/BowersWorld.png" alt="BowersWorld Logo">
+                            </div>
+                            <div class="welcome-title">Anderson's Library</div>
+                            <div class="welcome-subtitle">Professional Edition</div>
+                            <div class="welcome-description">Another Intuitive Product</div>
+                            <div class="welcome-description">from the folks at</div>
+                            <div class="bowers-brand">BowersWorld.com</div>
+                            <div class="welcome-footer">
+                                <div class="copyright">© 2025</div>
+                                <div class="design-standard">Design Standard v2.1</div>
+                                <div class="design-standard">Project Himalaya</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Status Bar with Complete Stats -->
+        <div class="status-bar">
+            <div class="status-message" id="statusMessage">Ready</div>
+            <div class="status-stats" id="statusStats">26 Categories • 118 Subjects • 1,219 Total eBooks</div>
+        </div>
+    </div>
+
+    <script>
+        // Global functions for inline event handlers
+
+
+        // Global functions for inline event handlers
+        function setViewMode(mode) {
+            if (window.libraryInterface) {
+                window.libraryInterface.setViewMode(mode);
+            }
+        }
+
+        function performSearch() {
+            if (window.libraryInterface) {
+                window.libraryInterface.performSearch();
+            }
+        }
+
+        function onCategoryChange() {
+            if (window.libraryInterface) {
+                window.libraryInterface.onCategoryChange();
+            }
+        }
+
+        function onSubjectChange() {
+            if (window.libraryInterface) {
+                window.libraryInterface.onSubjectChange();
+            }
+        }
+
+        function selectBook(bookId) {
+            if (window.libraryInterface) {
+                window.libraryInterface.selectBook(bookId);
+            }
+        }
+
+        function handleThumbnailError(img, bookId) {
+            if (window.libraryInterface) {
+                window.libraryInterface.handleThumbnailError(img, bookId);
+            }
+        }
+
+        function handleThumbnailLoad(img) {
+            if (window.libraryInterface) {
+                window.libraryInterface.handleThumbnailLoad(img);
+            }
+        }
+
+        function showAbout() {
+            if (window.libraryInterface) {
+                window.libraryInterface.showAboutBox();
+            }
+        }
+
+        function showStats() {
+            if (window.libraryInterface) {
+                window.libraryInterface.showStats();
+            }
+        }
+
+        function refreshLibrary() {
+            if (window.libraryInterface) {
+                window.libraryInterface.refreshLibrary();
+            }
+        }
+
+        function exportData() {
+            if (window.libraryInterface) {
+                window.libraryInterface.exportData();
+            }
+        }
+
+        function exitApp() {
+            if (window.libraryInterface) {
+                window.libraryInterface.exitApp();
+            }
+        }
+
+        function showHelp() {
+            if (window.libraryInterface) {
+                window.libraryInterface.showHelp();
+            }
+        }
+
+        function toggleViewMode() {
+            if (window.libraryInterface) {
+                window.libraryInterface.toggleViewMode();
+            }
+        }
+
+        console.log('📚 Anderson\'s Library Desktop Interface - All 10 Issues Fixed - BowersWorld Edition Ready!');
+    </script>
+    <script src="JS/library-api-client.js"></script>
+    <script>
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Anderson\'s Library Web Interface - All 10 Issues Fixed - Design Standard v2.1');
+            window.libraryInterface = new DesktopLibraryInterface();
+        });
+
+
+        // Handle page close events
+        window.addEventListener('beforeunload', function(event) {
+            // Call shutdown endpoint
+            if (window.libraryInterface) {
+                window.libraryInterface.shutdownServer();
+            }
+        });
+
+        // Handle visibility change (tab close, browser minimize, etc.)
+        document.addEventListener('visibilitychange', function() {
+            if (document.visibilityState === 'hidden') {
+                // Don't shutdown on just hiding, only on actual close
+                // This prevents shutdown when switching tabs
+            }
+        });
+    </script>
+</body>
+</html>

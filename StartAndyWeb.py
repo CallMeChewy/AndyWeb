@@ -190,7 +190,7 @@ class SmartAndyWebLauncher:
             Logger.info("🚀 Starting AndyWeb API server...")
             Logger.info(f"📡 Server will be available at: http://127.0.0.1:{Port}")
             Logger.info(f"📚 API documentation at: http://127.0.0.1:{Port}/api/docs")
-            Logger.info(f"🌐 Frontend application at: http://127.0.0.1:{Port}/app")
+            Logger.info(f"🌐 Frontend application at: http://127.0.0.1:{Port}/")
             
             if Port != 8000:
                 Logger.info(f"🔄 Note: Using port {Port} instead of 8000 due to conflicts")
@@ -226,7 +226,7 @@ class SmartAndyWebLauncher:
             
             # Use the selected port or default
             Port = self.SelectedPort or 8000
-            AppURL = f"http://127.0.0.1:{Port}/app"
+            AppURL = f"http://127.0.0.1:{Port}/"
             
             # Try to open the frontend application
             webbrowser.open(AppURL)
