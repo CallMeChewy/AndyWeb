@@ -652,6 +652,62 @@ class DatabaseManager:
         
         return Info
 
+    def GetBookThumbnail(self, BookId: int) -> Optional[bytes]:
+        """
+        Retrieve thumbnail image data for a specific book
+        
+        Args:
+            BookId: ID of the book to get thumbnail for
+            
+        Returns:
+            bytes: Thumbnail image data or None if not found
+        """
+        try:
+            Query = """
+            SELECT ThumbnailImage 
+            FROM Books 
+            WHERE Id = ?
+            """
+            
+            Result = self.ExecuteQuery(Query, (BookId,))
+            
+            if Result and Result[0]['ThumbnailImage']:
+                return Result[0]['ThumbnailImage']
+            else:
+                return None
+                
+        except Exception as Error:
+            self.Logger.error(f"Error getting thumbnail for book {BookId}: {Error}")
+            return None
+
+    def HasThumbnail(self, BookId: int) -> bool:
+        """
+        Check if a book has a thumbnail image
+        
+        Args:
+            BookId: ID of the book to check
+            
+        Returns:
+            bool: True if book has thumbnail, False otherwise
+        """
+        try:
+            Query = """
+            SELECT ThumbnailImage IS NOT NULL and LENGTH(ThumbnailImage) > 0 as HasThumb
+            FROM Books 
+            WHERE Id = ?
+            """
+            
+            Result = self.ExecuteQuery(Query, (BookId,))
+            
+            if Result:
+                return bool(Result[0]['HasThumb'])
+            else:
+                return False
+                
+        except Exception as Error:
+            self.Logger.error(f"Error checking thumbnail for book {BookId}: {Error}")
+            return False
+
     def __enter__(self):
         """Context manager entry"""
         self.Connect()

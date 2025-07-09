@@ -16,6 +16,7 @@ Maintains exact desktop functionality while following web ecosystem requirements
 import sys
 import logging
 import json
+import io
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Union
 from datetime import datetime
@@ -286,15 +287,18 @@ async def GetHealth():
             total_books=0
         )
 
-# Get all books with pagination
+# Get all books with pagination and optional search/filter
 @App.get("/api/books", response_model=BooksListResponse)
 async def GetBooks(
     page: int = Query(default=1, ge=1, description="Page number"),
-    limit: int = Query(default=50, ge=1, le=100, description="Items per page")
+    limit: int = Query(default=50, ge=1, le=100, description="Items per page"),
+    search: Optional[str] = Query(default=None, description="Search query for title/author"),
+    category: Optional[str] = Query(default=None, description="Filter by category"),
+    subject: Optional[str] = Query(default=None, description="Filter by subject")
 ):
     """
-    Get paginated list of all books
-    Maintains exact desktop functionality with web optimization
+    Get paginated list of books with optional search and filtering
+    FIXED: Added search parameter support to match frontend expectations
     """
     try:
         DatabaseManager = GetDatabase()
@@ -305,14 +309,45 @@ async def GetBooks(
         # Calculate offset for pagination
         Offset = (page - 1) * limit
         
-        # Get books with pagination
-        BooksData = DatabaseManager.GetBooksWithPagination(limit, Offset)
-        TotalBooks = DatabaseManager.GetBookCount()
+        # FIXED: Use search/filter functionality if parameters provided
+        if search or category or subject:
+            # Use search functionality
+            BooksData = DatabaseManager.SearchBooks(
+                SearchQuery=search,
+                Category=category,
+                Subject=subject,
+                Limit=limit,
+                Offset=Offset
+            )
+            
+            # Get total count for pagination
+            TotalBooks = DatabaseManager.GetSearchResultCount(
+                SearchQuery=search,
+                Category=category,
+                Subject=subject
+            )
+            
+            # Build descriptive message
+            FilterParts = []
+            if search:
+                FilterParts.append(f"Search: '{search}'")
+            if category:
+                FilterParts.append(f"Category: {category}")
+            if subject:
+                FilterParts.append(f"Subject: {subject}")
+            
+            Message = f"Filtered by {', '.join(FilterParts)}" if FilterParts else None
+            
+        else:
+            # Get all books with pagination
+            BooksData = DatabaseManager.GetBooksWithPagination(limit, Offset)
+            TotalBooks = DatabaseManager.GetBookCount()
+            Message = None
         
         # Convert to response models
         Books = [ConvertBookToResponse(BookRow) for BookRow in BooksData]
         
-        return CreatePaginatedResponse(Books, TotalBooks, page, limit)
+        return CreatePaginatedResponse(Books, TotalBooks, page, limit, Message)
         
     except Exception as Error:
         Logger.error(f"Error getting books: {Error}")
@@ -442,33 +477,42 @@ async def GetBook(book_id: int = FastAPIPath(..., description="Book ID")):
 @App.get("/api/books/{book_id}/thumbnail")
 async def GetBookThumbnail(book_id: int = FastAPIPath(..., description="Book ID")):
     """
-    Get book thumbnail image
-    Returns image file or 404 if not found
+    Get book thumbnail image from database
+    Returns image data or 404 if not found
+    FIXED: Now retrieves thumbnails from database BLOB instead of files
     """
     try:
-        # Look for thumbnail in thumbnails directory
-        ThumbnailPath = PROJECT_PATHS['thumbnails_dir'] / f"book_{book_id}.jpg"
+        DatabaseManager = GetDatabase()
         
-        if ThumbnailPath.exists():
-            return FileResponse(
-                path=str(ThumbnailPath),
-                media_type="image/jpeg",
-                headers={"Cache-Control": "max-age=3600"}  # Cache for 1 hour
-            )
+        if not DatabaseManager.Connect():
+            raise HTTPException(status_code=503, detail="Database connection failed")
         
-        # Try alternative formats
-        for Extension in ['.png', '.gif', '.webp']:
-            AlternatePath = PROJECT_PATHS['thumbnails_dir'] / f"book_{book_id}{Extension}"
-            if AlternatePath.exists():
-                MediaType = f"image/{Extension[1:]}"
-                return FileResponse(
-                    path=str(AlternatePath),
-                    media_type=MediaType,
-                    headers={"Cache-Control": "max-age=3600"}
-                )
+        # Get thumbnail data from database
+        ThumbnailData = DatabaseManager.GetBookThumbnail(book_id)
         
-        # No thumbnail found
-        raise HTTPException(status_code=404, detail="Thumbnail not found")
+        if not ThumbnailData:
+            raise HTTPException(status_code=404, detail="Thumbnail not found")
+        
+        # Determine media type from image data
+        MediaType = "image/jpeg"  # Default to JPEG
+        if ThumbnailData.startswith(b'\x89PNG'):
+            MediaType = "image/png"
+        elif ThumbnailData.startswith(b'GIF87a') or ThumbnailData.startswith(b'GIF89a'):
+            MediaType = "image/gif"
+        elif ThumbnailData.startswith(b'RIFF') and b'WEBP' in ThumbnailData[:12]:
+            MediaType = "image/webp"
+        # JPEG detection - check for JPEG markers
+        elif ThumbnailData.startswith(b'\xff\xd8'):
+            MediaType = "image/jpeg"
+        
+        return StreamingResponse(
+            io.BytesIO(ThumbnailData),
+            media_type=MediaType,
+            headers={
+                "Cache-Control": "max-age=3600",  # Cache for 1 hour
+                "Content-Length": str(len(ThumbnailData))
+            }
+        )
         
     except HTTPException:
         raise
@@ -505,10 +549,11 @@ async def GetCategories():
 
 # Get subjects
 @App.get("/api/subjects", response_model=List[SubjectResponse])
-async def GetSubjects(category_id: Optional[str] = Query(default=None, description="Filter by category")):
+async def GetSubjects(category: Optional[str] = Query(default=None, description="Filter by category name")):
     """
     Get all subjects with book counts
-    Optionally filtered by category
+    Optionally filtered by category NAME (not ID)
+    FIXED: sqlite3.Row access and proper category filtering
     """
     try:
         DatabaseManager = GetDatabase()
@@ -516,25 +561,38 @@ async def GetSubjects(category_id: Optional[str] = Query(default=None, descripti
         if not DatabaseManager.Connect():
             raise HTTPException(status_code=503, detail="Database connection failed")
         
-        if category_id:
-            SubjectsData = DatabaseManager.GetSubjectsByCategory(category_id)
+        # FIXED: Use category name for filtering, not category_id
+        if category:
+            SubjectsData = DatabaseManager.GetSubjectsByCategory(category)
         else:
             SubjectsData = DatabaseManager.GetSubjectsWithCounts()
         
-        Subjects = [
-            SubjectResponse(
-                name=Row['Subject'], 
-                category=Row.get('Category'),
-                count=Row['BookCount']
-            )
-            for Row in SubjectsData
-            if Row['Subject']  # Filter out null subjects
-        ]
+        # FIXED: Handle missing columns properly for sqlite3.Row
+        Subjects = []
+        for Row in SubjectsData:
+            try:
+                # Handle both possible column names and missing columns
+                subject_name = Row['Subject'] if 'Subject' in Row.keys() else ''
+                category_name = Row['Category'] if 'Category' in Row.keys() else ''
+                book_count = Row['BookCount'] if 'BookCount' in Row.keys() else 0
+                
+                if subject_name:  # Only add if subject name exists
+                    Subjects.append(SubjectResponse(
+                        name=subject_name,
+                        category=category_name,
+                        count=book_count
+                    ))
+            except Exception as RowError:
+                Logger.warning(f"Skipping row due to error: {RowError}")
+                continue
         
+        Logger.info(f"✅ Retrieved {len(Subjects)} subjects for category: {category or 'All'}")
         return Subjects
         
     except Exception as Error:
         Logger.error(f"Error getting subjects: {Error}")
+        Logger.error(f"Error type: {type(Error)}")
+        Logger.error(f"Category parameter: {category}")
         raise HTTPException(status_code=500, detail=f"Failed to retrieve subjects: {str(Error)}")
 
 # Get library statistics
@@ -564,6 +622,30 @@ async def GetLibraryStats():
     except Exception as Error:
         Logger.error(f"Error getting library stats: {Error}")
         raise HTTPException(status_code=500, detail=f"Failed to retrieve statistics: {str(Error)}")
+
+# Server shutdown endpoint
+@App.post("/api/shutdown")
+async def ShutdownServer():
+    """
+    Shutdown the server gracefully
+    Called when the webpage is closed
+    """
+    Logger.info("🛑 Server shutdown requested from web interface")
+    
+    # Use a background task to shutdown after responding
+    import asyncio
+    import os
+    import signal
+    
+    async def delayed_shutdown():
+        await asyncio.sleep(1)  # Give time for response to be sent
+        Logger.info("💥 Terminating server process...")
+        os.kill(os.getpid(), signal.SIGTERM)
+    
+    # Start the shutdown task
+    asyncio.create_task(delayed_shutdown())
+    
+    return {"message": "Server shutdown initiated"}
 
 # ==================== STATIC FILE SERVING ====================
 
