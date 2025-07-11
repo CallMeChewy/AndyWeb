@@ -1,0 +1,36 @@
+always apply thhese standards: Docs/Standards/Design Standard v2.1.md
+This is the db schema: Docs/Standards/SchemaMyLihraryWeb.pdf
+database in in: Data/Databases/MyLibraryWeb.db
+code is in Source/ and WebPages/ 
+startup program: StartAndyWeb.py
+
+Changes to be made:
+
+Screenshot of Grid View:
+file:///home/herb/Pictures/Screenshots/Screenshot%20From%202025-07-11%2015-13-55.png
+Screenshot of List View:
+file:///home/herb/Pictures/Screenshots/Screenshot%20From%202025-07-11%2015-16-11.png
+
+Grid view:
+remove Category Name from frames
+increase size of author name
+List View:
+remove Category Name from frames
+If there is sufficient realestate display in two columns
+increase size of author name
+
+Menu Bar:
+File: remove About
+Tools: remove this menu option
+
+Screen refresh:
+Controls stop working.
+
+Dropdown menu items
+Category Format: CategoryName (#subjests/#books)
+Subject Format: (SubjectName (#books))
+
+Status bar data:
+Categories: correct
+Subjects: subjects for sdelected category only
+Tortal books: initially = number of books on file. when screen has books displayed this is the number of books on screen.

@@ -519,6 +519,70 @@ async def GetBookThumbnail(book_id: int = FastAPIPath(..., description="Book ID"
         Logger.error(f"Error getting thumbnail for book {book_id}: {Error}")
         raise HTTPException(status_code=500, detail="Failed to retrieve thumbnail")
 
+# Get book PDF
+@App.get("/api/books/{book_id}/pdf")
+async def GetBookPDF(book_id: int = FastAPIPath(..., description="Book ID")):
+    """
+    Get book PDF for reading
+    Returns PDF file or 404 if not found
+    Opens PDF in browser for reading
+    """
+    try:
+        DatabaseManager = GetDatabase()
+        
+        if not DatabaseManager.Connect():
+            raise HTTPException(status_code=503, detail="Database connection failed")
+        
+        # Get book info to get the title for filename
+        BookData = DatabaseManager.GetBookById(book_id)
+        if not BookData:
+            raise HTTPException(status_code=404, detail="Book not found")
+        
+        # Try to get PDF data from database first
+        try:
+            PDFData = DatabaseManager.GetBookPDF(book_id)
+            if PDFData:
+                # Clean filename for download
+                SafeTitle = "".join(c for c in BookData['Title'] if c.isalnum() or c in (' ', '-', '_')).rstrip()
+                SafeTitle = SafeTitle.replace(' ', '_')
+                
+                return StreamingResponse(
+                    io.BytesIO(PDFData),
+                    media_type="application/pdf",
+                    headers={
+                        "Content-Disposition": f"inline; filename={SafeTitle}.pdf",
+                        "Content-Length": str(len(PDFData))
+                    }
+                )
+        except Exception as DbError:
+            Logger.warning(f"PDF not found in database for book {book_id}: {DbError}")
+        
+        # If no PDF in database, try file system
+        BookTitle = BookData['Title']
+        PossiblePaths = [
+            PROJECT_PATHS['project_root'] / 'Data' / 'Books' / f"{BookTitle}.pdf",
+            PROJECT_PATHS['project_root'] / 'Anderson eBooks' / f"{BookTitle}.pdf",
+            PROJECT_PATHS['project_root'] / 'Books' / f"{BookTitle}.pdf"
+        ]
+        
+        for PdfPath in PossiblePaths:
+            if PdfPath.exists():
+                return FileResponse(
+                    path=str(PdfPath),
+                    media_type="application/pdf",
+                    filename=f"{BookTitle}.pdf",
+                    headers={"Content-Disposition": "inline"}
+                )
+        
+        # If no PDF found anywhere, return 404
+        raise HTTPException(status_code=404, detail=f"PDF not found for book: {BookTitle}")
+        
+    except HTTPException:
+        raise
+    except Exception as Error:
+        Logger.error(f"Error getting PDF for book {book_id}: {Error}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve PDF")
+
 # Get categories
 @App.get("/api/categories", response_model=List[CategoryResponse])
 async def GetCategories():
@@ -707,7 +771,8 @@ async def NotFoundHandler(request: Request, exc: HTTPException):
                 "/api/subjects",
                 "/api/stats",
                 "/app",
-                "/mobile"
+                "/mobile",
+                "/api/books/{id}/pdf"
             ]
         }
     )

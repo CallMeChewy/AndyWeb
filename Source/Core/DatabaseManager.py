@@ -776,6 +776,79 @@ class DatabaseManager:
         except Exception as Error:
             self.Logger.error(f"Error checking thumbnail for book {BookId}: {Error}")
             return False
+    
+    def GetBookPDF(self, BookId: int) -> Optional[bytes]:
+        """
+        Retrieve PDF data for a specific book from database
+        
+        Args:
+            BookId: ID of the book to get PDF for
+            
+        Returns:
+            bytes: PDF data or None if not found
+        """
+        try:
+            # First, check if PDFData column exists
+            ColumnsQuery = "PRAGMA table_info(Books)"
+            Columns = self.ExecuteQuery(ColumnsQuery, ())
+            ColumnNames = [col['name'] for col in Columns]
+            
+            if 'PDFData' not in ColumnNames:
+                self.Logger.info(f"PDFData column not found in Books table")
+                return None
+            
+            Query = """
+            SELECT PDFData 
+            FROM Books 
+            WHERE Id = ?
+            """
+            
+            Result = self.ExecuteQuery(Query, (BookId,))
+            
+            if Result and Result[0]['PDFData']:
+                return Result[0]['PDFData']
+            else:
+                return None
+                
+        except Exception as Error:
+            self.Logger.error(f"Error getting PDF for book {BookId}: {Error}")
+            return None
+    
+    def HasPDF(self, BookId: int) -> bool:
+        """
+        Check if a book has PDF data
+        
+        Args:
+            BookId: ID of the book to check
+            
+        Returns:
+            bool: True if book has PDF, False otherwise
+        """
+        try:
+            # First, check if PDFData column exists
+            ColumnsQuery = "PRAGMA table_info(Books)"
+            Columns = self.ExecuteQuery(ColumnsQuery, ())
+            ColumnNames = [col['name'] for col in Columns]
+            
+            if 'PDFData' not in ColumnNames:
+                return False
+            
+            Query = """
+            SELECT PDFData IS NOT NULL and LENGTH(PDFData) > 0 as HasPDF
+            FROM Books 
+            WHERE Id = ?
+            """
+            
+            Result = self.ExecuteQuery(Query, (BookId,))
+            
+            if Result:
+                return bool(Result[0]['HasPDF'])
+            else:
+                return False
+                
+        except Exception as Error:
+            self.Logger.error(f"Error checking PDF for book {BookId}: {Error}")
+            return False
 
     def __enter__(self):
         """Context manager entry"""

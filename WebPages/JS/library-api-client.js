@@ -54,7 +54,7 @@ class AndersonLibraryAPI {
         // Event Handling
         this.eventListeners = new Map();
         
-        console.log('AndersonLibraryAPI v2.0 initialized');
+        // API initialized
     }
 
     // ==================== CORE API METHODS ====================
@@ -243,9 +243,7 @@ class AndersonLibraryAPI {
                 ? `/subjects?category=${encodeURIComponent(categoryId)}`
                 : '/subjects';
                 
-            console.log(`getSubjects: Requesting URL: ${url}`);
             const response = await this.makeRequest('GET', url);
-            console.log(`getSubjects: Received ${response.length} subjects for category '${categoryId}'`);
             
             this.cache.set(cacheKey, {
                 data: response,
@@ -515,7 +513,7 @@ class AndersonLibraryAPI {
         }
         
         this.cache.clear();
-        console.log('API cache cleared');
+        // Cache cleared
     }
 
     /**
@@ -543,9 +541,7 @@ class AndersonLibraryAPI {
         
         expired.forEach(key => this.cache.delete(key));
         
-        if (expired.length > 0) {
-            console.log(`Cleaned ${expired.length} expired cache entries`);
-        }
+        // Cleaned expired cache entries
     }
 
     // ==================== HEALTH CHECK ====================
@@ -596,7 +592,7 @@ class AndersonLibraryAPI {
             ];
             
             await Promise.all(promises);
-            console.log('Offline prefetch completed');
+            // Offline prefetch completed
             return true;
         } catch (error) {
             console.error('Offline prefetch failed:', error);
@@ -622,6 +618,10 @@ class DesktopLibraryInterface {
         this.searchTimeout = null;
         this.apiServerRunning = false;
 
+        // Setup event listeners immediately (synchronously)
+        this.setupEventListeners();
+        
+        // Initialize app data (asynchronously)
         this.initializeApp();
     }
 
@@ -638,8 +638,8 @@ class DesktopLibraryInterface {
                 return;
             }
 
-            // Show About box initially
-            this.showAboutBox();
+            // Show startup screen initially
+            this.showStartupScreen();
 
             // Load initial data
             await Promise.all([
@@ -647,22 +647,24 @@ class DesktopLibraryInterface {
                 this.loadStats()
             ]);
 
-            // Show about box initially, books will load on search/filter
-            this.showAboutBox();
-
             this.updateStatus('Ready');
-            this.setupEventListeners();
 
         } catch (error) {
             console.error('Initialization failed:', error);
             this.updateStatus('Failed to initialize application');
-            this.showAboutBox(); // Show about box if initialization fails
         }
     }
 
     async checkAPIServer() {
         try {
-            const stats = await this.api.getLibraryStats();
+            // Add timeout to prevent hanging
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('API check timeout')), 3000)
+            );
+            
+            const statsPromise = this.api.getLibraryStats();
+            const stats = await Promise.race([statsPromise, timeoutPromise]);
+            
             this.apiServerRunning = stats && stats.total_books !== undefined;
             return this.apiServerRunning;
         } catch (error) {
@@ -691,11 +693,99 @@ class DesktopLibraryInterface {
     }
 
     setupEventListeners() {
+        // Force remove all existing onclick handlers that might be interfering
+        const allElements = document.querySelectorAll('*');
+        allElements.forEach(el => {
+            if (el.onclick) {
+                el.removeAttribute('onclick');
+            }
+        });
+        
+        // Use capturing phase to ensure we get clicks first
+        document.addEventListener('click', (e) => {
+            // Handle view toggle button
+            if (e.target && e.target.id === 'viewToggleBtn') {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                this.toggleViewMode();
+                return false;
+            }
+            
+            // Handle dropdown menu items
+            if (e.target && e.target.classList.contains('dropdown-item')) {
+                const action = e.target.getAttribute('data-action');
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                
+                switch (action) {
+                    case 'showAbout':
+                        this.showAboutBox();
+                        break;
+                    case 'showStats':
+                        this.showStats();
+                        break;
+                    case 'exitApp':
+                        this.exitApp();
+                        break;
+                    case 'setViewMode':
+                        const mode = e.target.getAttribute('data-mode');
+                        this.setViewMode(mode);
+                        break;
+                    case 'toggleViewMode':
+                        this.toggleViewMode();
+                        break;
+                    case 'refreshLibrary':
+                        this.refreshLibrary();
+                        break;
+                    case 'exportData':
+                        this.exportData();
+                        break;
+                    case 'showHelp':
+                        this.showHelp();
+                        break;
+                }
+                return false;
+            }
+        }, true); // Use capturing phase
+        
+        // Direct attachment with multiple attempts
+        this.attachDirectHandlers();
+        
+        // Dropdown change handlers
+        const categorySelect = document.getElementById('categorySelect');
+        const subjectSelect = document.getElementById('subjectSelect');
+        
+        if (categorySelect) {
+            categorySelect.addEventListener('change', (e) => {
+                this.onCategoryChange();
+            });
+        }
+        
+        if (subjectSelect) {
+            subjectSelect.addEventListener('change', (e) => {
+                this.onSubjectChange();
+            });
+        }
+        
         // Search with debouncing
         const searchInput = document.getElementById('searchInput');
         if (searchInput) {
-            searchInput.value = ''; // Ensure search input is blank on load
+            searchInput.value = '';
             searchInput.addEventListener('input', (e) => {
+                const searchTerm = e.target.value.trim();
+                if (searchTerm.length > 0) {
+                    if (categorySelect) {
+                        categorySelect.value = '';
+                        this.currentCategory = '';
+                    }
+                    if (subjectSelect) {
+                        subjectSelect.value = '';
+                        this.currentSubject = '';
+                    }
+                }
+                
                 clearTimeout(this.searchTimeout);
                 this.searchTimeout = setTimeout(() => {
                     this.performSearch();
@@ -710,39 +800,48 @@ class DesktopLibraryInterface {
         }
     }
 
+    attachDirectHandlers() {
+        // Try multiple times to attach handlers as backup
+        for (let i = 0; i < 3; i++) {
+            setTimeout(() => {
+                const gridBtn = document.getElementById('viewToggleBtn');
+                
+                if (gridBtn && !gridBtn.hasAttribute('data-handler-attached')) {
+                    gridBtn.setAttribute('data-handler-attached', 'true');
+                    gridBtn.onclick = (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        this.toggleViewMode();
+                        return false;
+                    };
+                }
+            }, i * 200);
+        }
+    }
+
     showAboutBox() {
         const grid = document.getElementById('booksGrid');
         if (!grid) return;
         grid.innerHTML = `
-            <div class="about-box">
-                <div class="about-content">
-                    <div class="about-header">
-                        <h2>Anderson's Library</h2>
-                        <p class="subtitle">Professional Edition</p>
+            <div class="initial-display">
+                <div class="initial-card">
+                    <div class="library-icon">
+                        <img src="Assets/BowersWorld.png" alt="Anderson's Library" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                        <div class="icon-fallback" style="display: none;">📚</div>
                     </div>
-                    <div class="about-body">
-                        <div class="about-logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-                        </div>
-                        <div class="about-logo-fallback" style="display: none;">📚</div>
-                        <p><strong>Another Intuitive Product</strong></p>
-                        <p>from the folks at</p>
-                        <p><strong>BowersWorld.com</strong></p>
-                        <div class="copyright">© 2025</div>
-                        <div class="version">Design Standard v2.0</div>
-                        <div class="project">Project Himalaya</div>
-                    </div>
+                    <div class="initial-title">Anderson's Library</div>
+                    <div class="initial-subtitle">Professional Edition</div>
+                    <div class="library-status">Ready to search or browse books</div>
                 </div>
             </div>
         `;
 
-        document.getElementById('bookCount').textContent = 'Welcome to Anderson\'s Library';
+        document.getElementById('bookCount').textContent = 'Select a category or search for books';
     }
 
     async loadCategories() {
         try {
-            console.log('Loading categories from API');
             const categories = await this.api.getCategories();
-            console.log('Categories response:', categories);
             const sortedCategories = categories.sort((a, b) => a.name.localeCompare(b.name));
 
             const categorySelect = document.getElementById('categorySelect');
@@ -756,7 +855,7 @@ class DesktopLibraryInterface {
                 categorySelect.appendChild(option);
             });
 
-            console.log(`✅ Loaded ${categories.length} categories`);
+            // Categories loaded
 
         } catch (error) {
             console.error('Failed to load categories:', error);
@@ -795,7 +894,7 @@ class DesktopLibraryInterface {
                 subjectSelect.appendChild(option);
             });
 
-            console.log(`Loaded ${subjects.length} subjects`);
+            // Subjects loaded
 
         } catch (error) {
             console.error('Failed to load subjects:', error);
@@ -844,7 +943,6 @@ class DesktopLibraryInterface {
     }
 
     async loadBooks(filters = {}) {
-        console.log('loadBooks: Received filters:', filters);
         // Don't try to load books if API server isn't running
         if (!this.apiServerRunning) {
             this.showAPIWarning();
@@ -879,25 +977,28 @@ class DesktopLibraryInterface {
         if (!grid) return;
 
         if (!books || books.length === 0) {
-            this.showAboutBox();
+            this.showStartupScreen();
             return;
         }
 
-        grid.innerHTML = books.map(book => `
-            <div class="book-card" onclick="window.libraryInterface.selectBook(${JSON.stringify(book).replace(/'/g, "'")})">
-                <div class="book-thumbnail" id="thumb-${book.id}">
-                    <img src="${this.api.apiBase}/books/${book.id}/thumbnail"
-                         alt="${book.title}"
-                         onerror="handleThumbnailError(this, ${book.id})"
-                         onload="handleThumbnailLoad(this)">
+        grid.innerHTML = books.map(book => {
+            const bookJson = JSON.stringify(book).replace(/"/g, '&quot;');
+            return `
+                <div class="book-card" onclick="window.libraryInterface.openPDFReader(${bookJson})" data-book-id="${book.id}">
+                    <div class="book-thumbnail" id="thumb-${book.id}">
+                        <img src="${this.api.apiBase}/books/${book.id}/thumbnail"
+                             alt="${book.title}"
+                             onerror="handleThumbnailError(this, ${book.id})"
+                             onload="handleThumbnailLoad(this)">
+                    </div>
+                    <div class="book-info">
+                        <div class="book-title">${book.title || 'Unknown Title'}</div>
+                        <div class="book-author">${book.author || 'Unknown Author'}</div>
+                        <div class="book-category">${book.category || 'General'}</div>
+                    </div>
                 </div>
-                <div class="book-info">
-                    <div class="book-title">${book.title || 'Unknown Title'}</div>
-                    <div class="book-author">${book.author || 'Unknown Author'}</div>
-                    <div class="book-category">${book.category || 'General'}</div>
-                </div>
-            </div>
-        `).join('');
+            `;
+        }).join('');
     }
 
     handleThumbnailError(img, bookId) {
@@ -926,6 +1027,12 @@ class DesktopLibraryInterface {
         if (!categorySelect) return;
         this.currentCategory = categorySelect.value;
 
+        // Clear search box when category is selected
+        const searchInput = document.getElementById('searchInput');
+        if (searchInput) {
+            searchInput.value = '';
+        }
+
         // Reset subject dropdown
         this.currentSubject = '';
         const subjectSelect = document.getElementById('subjectSelect');
@@ -935,15 +1042,10 @@ class DesktopLibraryInterface {
         await this.loadSubjects(this.currentCategory);
 
         // Reload books
-        console.log('onCategoryChange: Calling loadBooks with filters:', {
-            category: this.currentCategory,
-            subject: this.currentSubject,
-            search: document.getElementById('searchInput').value
-        });
         await this.loadBooks({
             category: this.currentCategory,
             subject: this.currentSubject,
-            search: document.getElementById('searchInput').value
+            search: ''
         });
     }
 
@@ -957,16 +1059,17 @@ class DesktopLibraryInterface {
         if (!subjectSelect) return;
         this.currentSubject = subjectSelect.value;
 
+        // Clear search box when subject is selected
+        const searchInput = document.getElementById('searchInput');
+        if (searchInput) {
+            searchInput.value = '';
+        }
+
         // Reload books
-        console.log('onSubjectChange: Calling loadBooks with filters:', {
-            category: this.currentCategory,
-            subject: this.currentSubject,
-            search: document.getElementById('searchInput').value
-        });
         await this.loadBooks({
             category: this.currentCategory,
             subject: this.currentSubject,
-            search: document.getElementById('searchInput').value
+            search: ''
         });
     }
 
@@ -980,11 +1083,6 @@ class DesktopLibraryInterface {
         const searchInput = document.getElementById('searchInput');
         const searchTerm = searchInput ? searchInput.value : '';
 
-        console.log('performSearch: Calling loadBooks with filters:', {
-            category: this.currentCategory,
-            subject: this.currentSubject,
-            search: searchTerm
-        });
         await this.loadBooks({
             category: this.currentCategory,
             subject: this.currentSubject,
@@ -1040,32 +1138,136 @@ class DesktopLibraryInterface {
     }
 
     setViewMode(mode) {
-        const buttons = document.querySelectorAll('.view-mode-btn');
-        buttons.forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.mode === mode);
-        });
-
+        const button = document.getElementById('viewToggleBtn');
         const booksGrid = document.getElementById('booksGrid');
-        if (!booksGrid) return;
+        
+        if (!booksGrid || !button) return;
+        
         if (mode === 'grid') {
-            booksGrid.classList.remove('books-list');
-            booksGrid.classList.add('books-grid');
+            booksGrid.classList.remove('view-list');
+            booksGrid.classList.add('view-grid');
+            button.textContent = 'Grid View';
+            button.dataset.mode = 'grid';
         } else {
-            booksGrid.classList.remove('books-grid');
-            booksGrid.classList.add('books-list');
+            booksGrid.classList.remove('view-grid');
+            booksGrid.classList.add('view-list');
+            button.textContent = 'List View';
+            button.dataset.mode = 'list';
         }
 
         this.updateStatus(`View mode: ${mode}`);
     }
 
     toggleViewMode() {
-        const booksGrid = document.getElementById('booksGrid');
-        if (!booksGrid) return;
-        const currentMode = booksGrid.classList.contains('books-grid') ? 'grid' : 'list';
+        const button = document.getElementById('viewToggleBtn');
+        if (!button) return;
+        
+        const currentMode = button.dataset.mode || 'grid';
         const newMode = currentMode === 'grid' ? 'list' : 'grid';
         this.setViewMode(newMode);
     }
 
+    openPDFReader(book) {
+        // Open PDF directly without confirmation
+        const pdfUrl = `${this.api.apiBase}/books/${book.id}/pdf`;
+        // Opening PDF
+        window.open(pdfUrl, '_blank');
+    }
+    
+    showStartupScreen() {
+        const grid = document.getElementById('booksGrid');
+        if (!grid) return;
+        
+        grid.innerHTML = `
+            <div class="startup-display">
+                <div class="startup-card">
+                    <div class="startup-icon">
+                        <img src="/assets/BowersWorld.png" alt="Anderson's Library">
+                    </div>
+                    <div class="startup-title">Anderson's Library</div>
+                    <div class="startup-subtitle">Professional Edition</div>
+                    <div class="startup-description">Another Intuitive Product<br>from the folks at<br><strong>BowersWorld.com</strong></div>
+                    <div class="startup-footer">
+                        <div class="startup-copyright">© 2025</div>
+                        <div class="startup-version">Design Standard v2.1</div>
+                        <div class="startup-project">Project Himalaya</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    // Dialog functions for menu items
+    showAboutBox() {
+        // Create modal overlay
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+        overlay.innerHTML = `
+            <div class="about-dialog">
+                <div class="bowers-logo">
+                    <img src="/assets/BowersWorld.png" alt="BowersWorld Logo">
+                </div>
+                <h2>Anderson's Library</h2>
+                <p><strong>Professional Edition</strong></p>
+                <hr>
+                <p>Another Intuitive Product</p>
+                <p>from the folks at</p>
+                <p><strong>BowersWorld.com</strong></p>
+                <hr>
+                <p>© 2025</p>
+                <p>Design Standard v2.1</p>
+                <p>Project Himalaya</p>
+                <button onclick="this.parentElement.parentElement.remove()">Close</button>
+            </div>
+        `;
+        
+        document.body.appendChild(overlay);
+        
+        // Close on overlay click
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) {
+                overlay.remove();
+            }
+        });
+    }
+    
+    showStats() {
+        alert('Library Statistics:\n\nBooks: ' + this.currentBooks.length + '\nView: Desktop Interface\nStatus: Ready');
+    }
+    
+    refreshLibrary() {
+        this.api.clearCache();
+        this.loadStats();
+        this.loadCategories();
+        this.updateStatus('Library refreshed');
+    }
+    
+    exportData() {
+        alert('Export functionality coming soon!');
+    }
+    
+    exitApp() {
+        if (confirm('Are you sure you want to exit Anderson\'s Library?')) {
+            this.shutdownServer();
+        }
+    }
+    
+    showHelp() {
+        alert('Anderson\'s Library Help:\n\n1. Use search to find books\n2. Filter by category or subject\n3. Click books to read PDFs\n4. Toggle between Grid and List view\n\nDesign Standard v2.1');
+    }
+    
+    async shutdownServer() {
+        try {
+            await this.api.makeRequest('POST', '/shutdown');
+            setTimeout(() => {
+                window.close();
+            }, 1000);
+        } catch (error) {
+            console.error('Error shutting down server:', error);
+            window.close();
+        }
+    }
+    
     // Original cleanup function, kept for completeness
     cleanup() {
         this.cleanupFunctions.forEach(cleanup => cleanup());
