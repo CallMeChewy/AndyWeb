@@ -230,19 +230,22 @@ class AndersonLibraryAPI {
     async getSubjects(categoryId = null) {
         const cacheKey = `subjects_${categoryId || 'all'}`;
         
-        if (this.cache.has(cacheKey)) {
-            const cached = this.cache.get(cacheKey);
-            if (Date.now() - cached.timestamp < this.cacheTimeout) {
-                return cached.data;
-            }
-        }
+        // Temporarily disable caching for debugging
+        // if (this.cache.has(cacheKey)) {
+        //     const cached = this.cache.get(cacheKey);
+        //     if (Date.now() - cached.timestamp < this.cacheTimeout) {
+        //         return cached.data;
+        //     }
+        // }
 
         try {
             const url = categoryId 
-                ? `/subjects?category_id=${encodeURIComponent(categoryId)}`
+                ? `/subjects?category=${encodeURIComponent(categoryId)}`
                 : '/subjects';
                 
+            console.log(`getSubjects: Requesting URL: ${url}`);
             const response = await this.makeRequest('GET', url);
+            console.log(`getSubjects: Received ${response.length} subjects for category '${categoryId}'`);
             
             this.cache.set(cacheKey, {
                 data: response,

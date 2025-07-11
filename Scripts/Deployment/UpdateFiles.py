@@ -1,456 +1,335 @@
-# File: UpdateFiles.py
+# File: CliveJob.py
 # Path: Scripts/Deployment/UpdateFiles.py
-# Standard: AIDEV-PascalCase-1.9
-# Created: 2025-07-07
-# Last Modified: 2025-07-07  04:42PM
+# Standard: AIDEV-PascalCase-1.7
+# Created: 2025-06-05
+# Last Modified: 2025-06-26  17:45 PM
 """
-Description: Enhanced web-aware file management system for Project Himalaya
-Handles automated file placement with Design Standard v1.9 compliance including
-web framework exceptions, PascalCase conversion, and proper path handling.
-Supports modern web development conventions alongside traditional PascalCase rules.
+Description: Clive's Job – Himalaya-standard update/move/archive utility.
+Processes Updates folder, reads header for intended path, enforces PascalCase for all
+created directories and files (unless ecosystem exception), archives old copies,
+generates audit/status report, with full error handling, logging, and audit trail.
+
+Fixed: Now ignores base directory from header paths and uses relative paths from current directory.
+Fixed: Regex now handles both comment-style (# Path:) and docstring-style (Path:) headers.
+Fixed: Better handling of absolute paths with leading slashes.
+Fixed: Smarter base directory stripping - only strips known base directories, preserves nested paths.
+Updated: .md files with Path: headers now go to specified location instead of Docs folder.
 """
 
 import os
 import re
 import shutil
 import logging
-from pathlib import Path
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple
-import json
 
-# Configure logging
+# --- CONSTANTS ---
+UPDATES_DIR = 'Updates'
+ARCHIVE_DIR = 'Archive'
+DOCS_BASE = 'Docs'
+DOCS_UPDATES = os.path.join(DOCS_BASE, 'Updates')
+DATE_FMT = "%Y-%m-%d"
+TS_FMT = "%Y-%m-%d_%H-%M-%S"
+
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    format='[CliveJob] %(levelname)s: %(message)s'
 )
-Logger = logging.getLogger(__name__)
 
-class WebAwareFileManager:
-    """Enhanced file manager with web framework awareness and v1.9 compliance."""
-    
-    def __init__(self, ProjectRoot: str = "."):
-        """Initialize file manager with project root and web conventions."""
-        self.ProjectRoot = Path(ProjectRoot).resolve()
-        self.UpdatesFolder = self.ProjectRoot / "Updates"
-        self.ArchiveFolder = self.ProjectRoot / "Archive"
-        self.DocsFolder = self.ProjectRoot / "Docs"
-        
-        # Web framework exceptions - CRITICAL for compatibility
-        self.WEB_EXCEPTIONS = {
-            # Directories that MUST stay lowercase
-            'node_modules': 'node_modules',
-            'public': 'public',
-            'src': 'src',
-            'assets': 'assets',
-            'components': 'components',
-            'static': 'static',
-            'dist': 'dist',
-            'build': 'build',
-            
-            # Files that MUST stay lowercase
-            'index.html': 'index.html',
-            'package.json': 'package.json',
-            'package-lock.json': 'package-lock.json',
-            'tsconfig.json': 'tsconfig.json',
-            'webpack.config.js': 'webpack.config.js',
-            'babel.config.js': 'babel.config.js',
-            'vite.config.js': 'vite.config.js',
-            '.gitignore': '.gitignore',
-            'robots.txt': 'robots.txt',
-            'sitemap.xml': 'sitemap.xml',
-            'favicon.ico': 'favicon.ico',
-            
-            # API special cases - context sensitive
-            'API': 'API',          # Source/API/ (Python modules)
-            'api': 'api',          # WebPages/api/ or /api/ (web routes)
-            
-            # Common web utilities (lowercase convention)
-            'utils.js': 'utils.js',
-            'utils.ts': 'utils.ts',
-            'constants.js': 'constants.js',
-            'config.js': 'config.js',
-            'main.js': 'main.js',
-            'main.css': 'main.css',
-            'style.css': 'style.css',
-            'styles.css': 'styles.css',
-            'app.js': 'app.js',
-            'app.css': 'app.css'
-        }
-        
-        # Web-specific file extensions that follow web conventions
-        self.WEB_EXTENSIONS = {
-            '.html', '.css', '.js', '.ts', '.json', '.xml', '.txt',
-            '.scss', '.sass', '.less', '.vue', '.jsx', '.tsx'
-        }
-        
-        # Initialize folders
-        self._EnsureFoldersExist()
-        
-    def _EnsureFoldersExist(self) -> None:
-        """Ensure required folders exist."""
-        for Folder in [self.UpdatesFolder, self.ArchiveFolder]:
-            Folder.mkdir(exist_ok=True)
-            
-    def _IsWebFile(self, FilePath: Path) -> bool:
-        """Determine if file should follow web conventions."""
-        # Check if file is in web-related directories
-        WebPaths = ['WebPages', 'web', 'frontend', 'client', 'public', 'src', 'assets']
-        PathParts = FilePath.parts
-        
-        for Part in PathParts:
-            if Part.lower() in [p.lower() for p in WebPaths]:
-                return True
-                
-        # Check file extension
-        if FilePath.suffix.lower() in self.WEB_EXTENSIONS:
-            return True
-            
+def ToPascalCase(Segment: str) -> str:
+    """
+    Converts any file or directory segment to Himalaya PascalCase.
+    Preserves extension (lowercase), applies PascalCase to base.
+    Preserves already-good PascalCase filenames.
+    """
+    # Ecosystem exceptions
+    if Segment in ('__init__.py', 'setup.py'):
+        return Segment
+
+    # Handle file extension (only split at LAST dot)
+    if '.' in Segment and not Segment.startswith('.'):
+        Base, Ext = Segment.rsplit('.', 1)
+        Ext = Ext.lower()
+    else:
+        Base, Ext = Segment, ''
+
+    # Check if Base is already in good PascalCase format
+    if IsAlreadyPascalCase(Base):
+        logging.info(f"Preserving already-good PascalCase: '{Base}'")
+        return f"{Base}.{Ext}" if Ext else Base
+
+    # Remove all non-alphanumeric separators, PascalCase the rest
+    Words = re.split(r'[\s_\-]+', Base)
+    Pascal = ''.join(Word.capitalize() for Word in Words if Word)
+
+    return f"{Pascal}.{Ext}" if Ext else Pascal
+
+def IsAlreadyPascalCase(Text: str) -> bool:
+    """
+    Check if text is already in acceptable PascalCase format.
+    Returns True if the text should be preserved as-is.
+    """
+    # Must start with uppercase letter
+    if not Text or not Text[0].isupper():
         return False
-        
-    def _ApplyWebExceptions(self, Name: str, IsDirectory: bool = False, 
-                          FilePath: Optional[Path] = None) -> str:
-        """Apply web framework exceptions to naming."""
-        
-        # Direct exception match
-        if Name in self.WEB_EXCEPTIONS:
-            Logger.debug(f"Web exception applied: {Name} -> {self.WEB_EXCEPTIONS[Name]}")
-            return self.WEB_EXCEPTIONS[Name]
-            
-        # Context-sensitive API handling
-        if Name.upper() == 'API':
-            if FilePath and self._IsWebFile(FilePath):
-                # In web context, use lowercase
-                if 'WebPages' in str(FilePath) or 'frontend' in str(FilePath):
-                    Logger.debug(f"Web API context: {Name} -> api")
-                    return 'api'
-            # In Python context, use uppercase
-            Logger.debug(f"Python API context: {Name} -> API")
-            return 'API'
-            
-        # Web file extensions should often stay lowercase
-        if FilePath and FilePath.suffix.lower() in self.WEB_EXTENSIONS:
-            if self._IsWebFile(FilePath):
-                # Common web patterns that should stay lowercase
-                WebPatterns = [
-                    'index', 'main', 'app', 'utils', 'config', 'constants',
-                    'style', 'styles', 'component', 'service'
-                ]
-                
-                NameLower = Name.lower()
-                for Pattern in WebPatterns:
-                    if Pattern in NameLower:
-                        Logger.debug(f"Web pattern match: {Name} -> {Name.lower()}")
-                        return Name.lower()
-                        
-        return None  # No exception applied
-        
-    def _ConvertToPascalCase(self, Name: str, IsDirectory: bool = False, 
-                           FilePath: Optional[Path] = None) -> str:
-        """Convert name to PascalCase with web framework awareness."""
-        
-        # First check for web exceptions
-        WebException = self._ApplyWebExceptions(Name, IsDirectory, FilePath)
-        if WebException is not None:
-            return WebException
-            
-        # Apply standard PascalCase conversion
-        # Remove file extension for processing
-        NamePart = Name
-        Extension = ""
-        
-        if not IsDirectory and '.' in Name:
-            NamePart, Extension = Name.rsplit('.', 1)
-            Extension = '.' + Extension
-            
-        # Convert underscores and hyphens to spaces, then to PascalCase
-        Words = re.split(r'[_\-\s]+', NamePart)
-        PascalName = ''.join(Word.capitalize() for Word in Words if Word)
-        
-        Result = PascalName + Extension
-        Logger.debug(f"PascalCase conversion: {Name} -> {Result}")
-        return Result
-        
-    def _ExtractHeaderPath(self, FilePath: Path) -> Optional[str]:
-        """Extract Path: header from file."""
-        try:
-            with open(FilePath, 'r', encoding='utf-8', errors='ignore') as File:
-                for LineNum, Line in enumerate(File, 1):
-                    if LineNum > 20:  # Only check first 20 lines
-                        break
-                        
-                    # Match various header formats
-                    Patterns = [
-                        r'^#\s*Path:\s*(.+)$',          # Python/Shell
-                        r'^//\s*Path:\s*(.+)$',         # JavaScript
-                        r'^<!--\s*.*Path:\s*(.+).*-->$', # HTML
-                        r'^/\*\s*.*Path:\s*(.+).*\*/$', # CSS
-                        r'^\s*"_path":\s*"(.+)"',       # JSON
-                    ]
-                    
-                    for Pattern in Patterns:
-                        Match = re.search(Pattern, Line.strip(), re.IGNORECASE)
-                        if Match:
-                            Path = Match.group(1).strip()
-                            Logger.debug(f"Found header path: {Path}")
-                            return Path
-                            
-        except Exception as Error:
-            Logger.warning(f"Could not read header from {FilePath}: {Error}")
-            
-        return None
-        
-    def _StripBaseDirectories(self, Path: str) -> str:
-        """Remove known base directories from path."""
-        BaseDirs = ['ProjectHimalaya', 'BowersWorld-com', 'AndyWeb', 'Project']
-        
-        for BaseDir in BaseDirs:
-            if Path.startswith(BaseDir + '/'):
-                Path = Path[len(BaseDir) + 1:]
-                Logger.debug(f"Stripped base directory: {BaseDir}")
-                
-        return Path
-        
-    def _ConvertPathToPascalCase(self, Path: str) -> str:
-        """Convert entire path to PascalCase with web awareness."""
-        PathParts = Path.split('/')
-        ConvertedParts = []
-        
-        for i, Part in enumerate(PathParts):
-            if not Part:
-                continue
-                
-            IsDirectory = i < len(PathParts) - 1
-            
-            # Create a temporary path for context
-            CurrentPath = Path('/'.join(PathParts[:i+1]))
-            TempPath = Path(CurrentPath)
-            
-            ConvertedPart = self._ConvertToPascalCase(Part, IsDirectory, TempPath)
-            ConvertedParts.append(ConvertedPart)
-            
-        Result = '/'.join(ConvertedParts)
-        Logger.debug(f"Path conversion: {Path} -> {Result}")
-        return Result
-        
-    def _ArchiveExistingFile(self, TargetPath: Path) -> bool:
-        """Archive existing file with timestamp."""
-        if not TargetPath.exists():
-            return True
-            
-        try:
-            Timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            ArchiveName = f"{TargetPath.stem}_{Timestamp}{TargetPath.suffix}"
-            ArchivePath = self.ArchiveFolder / ArchiveName
-            
-            # Ensure archive directory exists
-            self.ArchiveFolder.mkdir(exist_ok=True)
-            
-            shutil.move(str(TargetPath), str(ArchivePath))
-            Logger.info(f"Archived: {TargetPath.name} -> {ArchivePath.name}")
-            return True
-            
-        except Exception as Error:
-            Logger.error(f"Failed to archive {TargetPath}: {Error}")
-            return False
-            
-    def _ValidateTimestamp(self, FilePath: Path) -> bool:
-        """Validate that file has proper timestamp (v1.9 compliance)."""
-        try:
-            with open(FilePath, 'r', encoding='utf-8', errors='ignore') as File:
-                Content = File.read(500)  # Check first 500 chars
-                
-            # Look for Last Modified timestamp
-            Pattern = r'Last Modified:\s*\d{4}-\d{2}-\d{2}\s+\d{1,2}:\d{2}[AP]M'
-            if re.search(Pattern, Content):
-                Logger.debug(f"Valid timestamp found in {FilePath.name}")
-                return True
-            else:
-                Logger.warning(f"Missing or invalid timestamp in {FilePath.name}")
-                return False
-                
-        except Exception as Error:
-            Logger.warning(f"Could not validate timestamp in {FilePath}: {Error}")
-            return False
-            
-    def ProcessFile(self, SourceFile: Path) -> Dict[str, str]:
-        """Process a single file according to Design Standard v1.9."""
-        Result = {
-            'status': 'skipped',
-            'source': str(SourceFile),
-            'target': '',
-            'message': 'Unknown'
-        }
-        
-        try:
-            # Validate timestamp (v1.9 requirement)
-            if not self._ValidateTimestamp(SourceFile):
-                Result['status'] = 'warning'
-                Result['message'] = 'Invalid or missing timestamp'
-                
-            # Extract header path
-            HeaderPath = self._ExtractHeaderPath(SourceFile)
-            
-            if HeaderPath:
-                # Process header path
-                CleanPath = self._StripBaseDirectories(HeaderPath)
-                ConvertedPath = self._ConvertPathToPascalCase(CleanPath)
-                TargetPath = self.ProjectRoot / ConvertedPath
-                
-                # Ensure target directory exists
-                TargetPath.parent.mkdir(parents=True, exist_ok=True)
-                
-                # Archive existing file
-                if not self._ArchiveExistingFile(TargetPath):
-                    Result['status'] = 'error'
-                    Result['message'] = 'Failed to archive existing file'
-                    return Result
-                    
-                # Move file
-                shutil.move(str(SourceFile), str(TargetPath))
-                
-                Result['status'] = 'moved'
-                Result['target'] = str(TargetPath)
-                Result['message'] = f'Moved by header path (v1.9 compliant)'
-                Logger.info(f"✅ {SourceFile.name} -> {ConvertedPath}")
-                
-            elif SourceFile.suffix.lower() in ['.md', '.txt', '.pdf']:
-                # Documentation files go to dated docs folder
-                Today = datetime.now().strftime("%Y-%m-%d")
-                DocsDateFolder = self.DocsFolder / Today
-                DocsDateFolder.mkdir(parents=True, exist_ok=True)
-                
-                TargetPath = DocsDateFolder / SourceFile.name
-                shutil.move(str(SourceFile), str(TargetPath))
-                
-                Result['status'] = 'moved'
-                Result['target'] = str(TargetPath)
-                Result['message'] = 'Moved to docs (dated, original filename)'
-                Logger.info(f"✅ {SourceFile.name} -> {TargetPath}")
-                
-            else:
-                Result['status'] = 'skipped'
-                Result['message'] = 'No header path found and not a doc file'
-                Logger.info(f"⏭️ {SourceFile.name} -> Skipped")
-                
-        except Exception as Error:
-            Result['status'] = 'error'
-            Result['message'] = f'Processing error: {Error}'
-            Logger.error(f"❌ {SourceFile.name} -> Error: {Error}")
-            
-        return Result
-        
-    def ProcessAllFiles(self) -> Dict[str, any]:
-        """Process all files in Updates folder."""
-        Logger.info("Starting file processing with Design Standard v1.9...")
-        
-        if not self.UpdatesFolder.exists():
-            Logger.error("Updates folder does not exist")
-            return {'status': 'error', 'message': 'Updates folder not found'}
-            
-        Files = list(self.UpdatesFolder.iterdir())
-        if not Files:
-            Logger.info("No files to process")
-            return {'status': 'success', 'message': 'No files found', 'results': []}
-            
-        Results = []
-        Stats = {'moved': 0, 'skipped': 0, 'errors': 0, 'warnings': 0}
-        
-        for File in Files:
-            if File.is_file():
-                Result = self.ProcessFile(File)
-                Results.append(Result)
-                
-                # Update stats
-                if Result['status'] in Stats:
-                    Stats[Result['status']] += 1
-                else:
-                    Stats['errors'] += 1
-                    
-        # Generate report
-        ReportPath = self._GenerateReport(Results, Stats)
-        
-        Logger.info(f"Processing complete: {Stats}")
-        
-        return {
-            'status': 'success',
-            'stats': Stats,
-            'results': Results,
-            'report_path': str(ReportPath)
-        }
-        
-    def _GenerateReport(self, Results: List[Dict], Stats: Dict) -> Path:
-        """Generate markdown report with v1.9 compliance details."""
-        Timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        ReportPath = self.DocsFolder / "Updates" / f"Updates_{Timestamp}.md"
-        
-        # Ensure directory exists
-        ReportPath.parent.mkdir(parents=True, exist_ok=True)
-        
-        with open(ReportPath, 'w', encoding='utf-8') as Report:
-            Report.write(f"""# File: Updates_{Timestamp}.md
-# Path: Docs/Updates/Updates_{Timestamp}.md
-# Standard: AIDEV-PascalCase-1.9
-# Created: {datetime.now().strftime("%Y-%m-%d")}
-# Last Modified: {datetime.now().strftime("%Y-%m-%d  %I:%M%p")}
----
-
-# Updates Status Report — {Timestamp}
-
-**Design Standard:** v1.9 (Web-Enhanced & AI-Compliant)
-
-**Total files processed:** {len(Results)}
-
-**Summary:**
-- ✅ Moved: {Stats['moved']}
-- ⏭️ Skipped: {Stats['skipped']}
-- ❌ Errors: {Stats['errors']}
-- ⚠️ Warnings: {Stats['warnings']}
-
-**Details:**
-
-""")
-            
-            for Result in Results:
-                Status = Result['status']
-                StatusIcon = {
-                    'moved': '✅',
-                    'skipped': '⏭️',
-                    'error': '❌',
-                    'warning': '⚠️'
-                }.get(Status, '❓')
-                
-                SourceName = Path(Result['source']).name
-                Message = Result['message']
-                
-                if Result['target']:
-                    TargetRel = Path(Result['target']).relative_to(self.ProjectRoot)
-                    Report.write(f"- {StatusIcon} **{SourceName}**: {Message}  \n")
-                    Report.write(f"    `{TargetRel}`\n\n")
-                else:
-                    Report.write(f"- {StatusIcon} **{SourceName}**: {Message}  \n")
-                    Report.write(f"    `Kept in: Updates/{SourceName}`\n\n")
-                    
-        Logger.info(f"Report generated: {ReportPath}")
-        return ReportPath
-
-def main():
-    """Main execution function."""
-    Manager = WebAwareFileManager()
     
+    # Must be all alphanumeric
+    if not Text.isalnum():
+        return False
+    
+    # Check for reasonable PascalCase pattern:
+    # - Starts with uppercase
+    # - Has at least one more uppercase letter (indicating word boundaries)
+    # - No consecutive uppercase letters (avoid ALL_CAPS)
+    uppercase_count = sum(1 for c in Text if c.isupper())
+    
+    # If it's all one word (like "Script"), allow it
+    if len(Text) <= 8 and uppercase_count == 1:
+        return True
+    
+    # For longer names, require multiple uppercase letters (PascalCase pattern)
+    # but not too many (avoid ALLCAPS)
+    if uppercase_count >= 2 and uppercase_count <= len(Text) // 2:
+        # Check for consecutive uppercase (avoid "XMLHTTPRequest" style)
+        consecutive_upper = any(Text[i].isupper() and Text[i+1].isupper() 
+                               for i in range(len(Text)-1))
+        if not consecutive_upper:
+            return True
+    
+    return False
+
+def PascalCasePath(Path: str) -> str:
+    """
+    Applies ToPascalCase to every segment of a path (directories and filename).
+    """
+    Path = Path.replace('\\', '/')
+    Segments = Path.split('/')
+    PascalSegments = [ToPascalCase(Segment) for Segment in Segments if Segment]
+    return '/'.join(PascalSegments)
+
+def ReadHeaderTargetPath(FilePath: str) -> str:
+    """
+    Extracts intended path from file header ('Path: ...'), removes base directory,
+    and PascalCases the remaining relative path.
+    
+    Example: 'Path: ProjectHimalaya/CliveJob.py' becomes './CliveJob.py'
+    Example: 'Path: /BowersWorld-com/SetupSearchSystem_v2.py' becomes './SetupSearchSystem_v2.py'
+    """
     try:
-        Results = Manager.ProcessAllFiles()
-        
-        if Results['status'] == 'success':
-            print(f"✅ Processing completed successfully!")
-            print(f"📊 Stats: {Results['stats']}")
-            print(f"📄 Report: {Results['report_path']}")
-        else:
-            print(f"❌ Processing failed: {Results.get('message', 'Unknown error')}")
-            
+        with open(FilePath, 'r', encoding='utf-8') as File:
+            for _ in range(15):  # Check first 15 lines for header (docstrings can be longer)
+                Line = File.readline()
+                if not Line:  # End of file
+                    break
+                    
+                # Match both comment-style and docstring-style paths
+                # Handles: # Path: ... OR Path: ... (without #)
+                Match = re.match(r'(?:#\s*)?Path:\s*(.+)', Line.strip())
+                if Match:
+                    FullPath = Match.group(1).strip()
+                    logging.info(f"Found header path: '{FullPath}' in {FilePath}")
+                    
+                    # Remove base directory and use relative path
+                    RelativePath = StripBaseDirectory(FullPath)
+                    
+                    if RelativePath:
+                        FinalPath = PascalCasePath(RelativePath)
+                        logging.info(f"Processed path: '{FullPath}' -> '{RelativePath}' -> '{FinalPath}'")
+                        return FinalPath
+                    else:
+                        logging.warning(f"Empty path after stripping base directory from: {FullPath}")
+                        return None
     except Exception as Error:
-        Logger.error(f"Fatal error: {Error}")
-        print(f"💥 Fatal error: {Error}")
+        logging.warning(f"Error reading header from {FilePath}: {Error}")
+    return None
+
+def StripBaseDirectory(Path: str) -> str:
+    """
+    Removes known base directories from a path, returning the relative path.
+    Only strips if the path starts with a recognized base directory.
+    
+    Examples:
+    - 'ProjectHimalaya/Source/Utilities/File.py' -> 'Source/Utilities/File.py'
+    - 'Source/Utilities/File.py' -> 'Source/Utilities/File.py' (unchanged)
+    - '/BowersWorld-com/SetupSearchSystem_v2.py' -> 'SetupSearchSystem_v2.py' 
+    - 'SingleFile.py' -> 'SingleFile.py'
+    """
+    # Normalize path separators and remove leading/trailing slashes
+    Path = Path.replace('\\', '/').strip('/')
+    
+    # Split into segments
+    Segments = [Segment for Segment in Path.split('/') if Segment]
+    
+    if len(Segments) <= 1:
+        # If only one segment (filename only), return as-is
+        return Path
+    
+    # Known base directories that should be stripped
+    # Add any other base directory names you use
+    KNOWN_BASE_DIRS = {
+        'ProjectHimalaya',
+        'BowersWorld-com', 
+        'Himalaya',
+        'Project',
+        # Add more as needed
+    }
+    
+    FirstSegment = Segments[0]
+    
+    # Only strip if first segment is a known base directory
+    if FirstSegment in KNOWN_BASE_DIRS:
+        RelativeSegments = Segments[1:]
+        RelativePath = '/'.join(RelativeSegments)
+        logging.info(f"Stripped known base directory '{FirstSegment}': '{Path}' -> '{RelativePath}'")
+        return RelativePath
+    else:
+        # Path doesn't start with known base dir, return as-is
+        logging.info(f"No known base directory found, keeping path as-is: '{Path}'")
+        return Path
+
+def ArchiveExisting(TargetPath: str) -> str:
+    """
+    If file exists, moves it to Archive dir (PascalCase), adds timestamp.
+    """
+    if os.path.exists(TargetPath):
+        ArchiveDir = os.path.join(ARCHIVE_DIR, os.path.dirname(TargetPath))
+        os.makedirs(ArchiveDir, exist_ok=True)
+        BaseName = os.path.basename(TargetPath)
+        TimeStamp = datetime.now().strftime(TS_FMT)
+        if '.' in BaseName and not BaseName.startswith('.'):
+            Base, Ext = BaseName.rsplit('.', 1)
+            Ext = Ext.lower()
+        else:
+            Base, Ext = BaseName, ''
+        ArchiveName = f"{ToPascalCase(Base)}_{TimeStamp}{'.' + Ext if Ext else ''}"
+        ArchivePath = os.path.join(ArchiveDir, ArchiveName)
+        shutil.move(TargetPath, ArchivePath)
+        logging.info(f"Archived old file: {TargetPath} → {ArchivePath}")
+        return ArchivePath
+    return None
+
+def MoveOrCopyFile(SourcePath: str, DestPath: str) -> None:
+    """
+    Moves file, archiving old if needed, ensuring PascalCase on all dirs/files.
+    """
+    # Ensure destination directory exists
+    DestDir = os.path.dirname(DestPath)
+    if DestDir:  # Only create if there's a directory component
+        os.makedirs(DestDir, exist_ok=True)
+    
+    # Archive existing file if it exists
+    ArchiveExisting(DestPath)
+    
+    # Move the file
+    shutil.move(SourcePath, DestPath)
+    logging.info(f"Moved: {SourcePath} → {DestPath}")
+
+def ProcessUpdates() -> None:
+    """
+    Processes all files in Updates folder with full Himalaya + PascalCase enforcement.
+    Now correctly handles relative paths by stripping base directories from headers.
+    Updated: .md files with Path: headers go to specified location instead of Docs folder.
+    """
+    Today = datetime.now().strftime(DATE_FMT)
+    StatusEntries = []
+    os.makedirs(DOCS_UPDATES, exist_ok=True)
+
+    # Check if Updates directory exists
+    if not os.path.exists(UPDATES_DIR):
+        logging.warning(f"Updates directory '{UPDATES_DIR}' does not exist!")
+        return
+
+    for FileName in os.listdir(UPDATES_DIR):
+        SourcePath = os.path.join(UPDATES_DIR, FileName)
+        if not os.path.isfile(SourcePath):
+            continue
+            
+        HeaderPath = ReadHeaderTargetPath(SourcePath)
+        FileExt = os.path.splitext(FileName)[1].lower()
+        Status = {'File': FileName, 'Result': '', 'Detail': ''}
+        
+        try:
+            # Check if it's a .md file
+            if FileExt == '.md':
+                if HeaderPath:
+                    # .md file with Path: header - use specified location
+                    DestPath = HeaderPath
+                    MoveOrCopyFile(SourcePath, DestPath)
+                    Status['Result'] = 'Moved by header path (.md with Path: header)'
+                    Status['Detail'] = DestPath
+                else:
+                    # .md file without Path: header - move to Docs folder
+                    DocsDayDir = os.path.join(DOCS_BASE, Today)
+                    DestPath = os.path.join(DocsDayDir, FileName)
+                    MoveOrCopyFile(SourcePath, DestPath)
+                    Status['Result'] = 'Moved to Docs (no Path: header)'
+                    Status['Detail'] = DestPath
+                    
+            # .txt files: always move to Docs/YYYY-MM-DD/ (original name for doc provenance)
+            elif FileExt == '.txt':
+                DocsDayDir = os.path.join(DOCS_BASE, Today)
+                DestPath = os.path.join(DocsDayDir, FileName)
+                MoveOrCopyFile(SourcePath, DestPath)
+                Status['Result'] = 'Moved to Docs (dated, original filename)'
+                Status['Detail'] = DestPath
+                
+            elif HeaderPath:
+                # Other file types with header path
+                DestPath = HeaderPath
+                MoveOrCopyFile(SourcePath, DestPath)
+                Status['Result'] = 'Moved by header path (base directory stripped, PascalCase applied)'
+                Status['Detail'] = DestPath
+                
+            else:
+                Status['Result'] = 'Skipped (no header path, not doc)'
+                Status['Detail'] = f"Kept in: {SourcePath}"
+                logging.warning(f"Skipped: {FileName} (no header path and not .md/.txt)")
+                
+        except Exception as Error:
+            Status['Result'] = 'Error'
+            Status['Detail'] = str(Error)
+            logging.error(f"Failed processing {FileName}: {Error}")
+            
+        StatusEntries.append(Status)
+
+    # Write status report
+    ReportTimeStamp = datetime.now().strftime(TS_FMT)
+    ReportPath = os.path.join(DOCS_UPDATES, f'Updates_{ReportTimeStamp}.md')
+    
+    with open(ReportPath, 'w', encoding='utf-8') as Report:
+        Report.write(f"# Updates Status Report — {ReportTimeStamp}\n\n")
+        Report.write(f"**Total files processed:** {len(StatusEntries)}\n\n")
+        
+        # Summary counts
+        Moved = sum(1 for entry in StatusEntries if 'Moved' in entry['Result'])
+        Skipped = sum(1 for entry in StatusEntries if 'Skipped' in entry['Result'])
+        Errors = sum(1 for entry in StatusEntries if 'Error' in entry['Result'])
+        
+        Report.write(f"**Summary:**\n")
+        Report.write(f"- ✅ Moved: {Moved}\n")
+        Report.write(f"- ⏭️ Skipped: {Skipped}\n")
+        Report.write(f"- ❌ Errors: {Errors}\n\n")
+        Report.write(f"**Details:**\n\n")
+        
+        for Entry in StatusEntries:
+            # Add emoji based on result
+            if 'Moved' in Entry['Result']:
+                Emoji = '✅'
+            elif 'Skipped' in Entry['Result']:
+                Emoji = '⏭️'
+            elif 'Error' in Entry['Result']:
+                Emoji = '❌'
+            else:
+                Emoji = '❓'
+                
+            Report.write(f"- {Emoji} **{Entry['File']}**: {Entry['Result']}  \n")
+            Report.write(f"    `{Entry['Detail']}`\n\n")
+            
+    print(f"\n[CliveJob] Status report written: {ReportPath}")
+    print(f"[CliveJob] Summary - Moved: {Moved}, Skipped: {Skipped}, Errors: {Errors}")
 
 if __name__ == "__main__":
-    main()
+    print("[CliveJob] Himalaya file processor starting...")
+    print("[CliveJob] Fixed version - now strips base directories from header paths")
+    print("[CliveJob] Updated: .md files with Path: headers go to specified location")
+    ProcessUpdates()
+    print("[CliveJob] All done. Review status report for details.")

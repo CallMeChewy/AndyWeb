@@ -291,18 +291,47 @@ class DatabaseManager:
         Filter books by category, subject, and/or rating
         Maintains exact desktop filter behavior
         """
+        self.Logger.info(f"GetBooksByFilters called with Category='{Category}', Subject='{Subject}', MinRating={MinRating}")
+        
         WhereConditions = []
         Parameters = []
         
         if Category:
             WhereConditions.append("C.Category = ?")
             Parameters.append(Category)
+            self.Logger.info(f"Added category filter: C.Category = '{Category}'")
             
         if Subject:
             WhereConditions.append("S.Subject = ?")
             Parameters.append(Subject)
+            self.Logger.info(f"Added subject filter: S.Subject = '{Subject}'")
             
-        # Build query
+        # Build query with proper JOIN types based on filters
+        if Category and Subject:
+            # Both filters - use INNER JOIN for both
+            JoinClause = """
+            INNER JOIN Categories C ON B.CategoryId = C.Id
+            INNER JOIN Subjects S ON B.SubjectId = S.Id
+            """
+        elif Category:
+            # Category filter only - use INNER JOIN for Categories
+            JoinClause = """
+            INNER JOIN Categories C ON B.CategoryId = C.Id
+            LEFT JOIN Subjects S ON B.SubjectId = S.Id
+            """
+        elif Subject:
+            # Subject filter only - use INNER JOIN for Subjects
+            JoinClause = """
+            LEFT JOIN Categories C ON B.CategoryId = C.Id
+            INNER JOIN Subjects S ON B.SubjectId = S.Id
+            """
+        else:
+            # No filters - use LEFT JOIN for both
+            JoinClause = """
+            LEFT JOIN Categories C ON B.CategoryId = C.Id
+            LEFT JOIN Subjects S ON B.SubjectId = S.Id
+            """
+        
         if WhereConditions:
             WhereClause = "WHERE " + " AND ".join(WhereConditions)
         else:
@@ -312,15 +341,21 @@ class DatabaseManager:
         SELECT B.Id, B.Title, B.Author, C.Category, S.Subject, 
                B.PageCount, B.FileSize, B.CreatedDate, B.ModifiedDate
         FROM Books B
-        LEFT JOIN Categories C ON B.CategoryId = C.Id
-        LEFT JOIN Subjects S ON B.SubjectId = S.Id
+        {JoinClause}
         {WhereClause}
         ORDER BY B.Title ASC
         LIMIT ? OFFSET ?
         """
         
         Parameters.extend([Limit, Offset])
-        return self.ExecuteQuery(Query, tuple(Parameters))
+        
+        self.Logger.info(f"Final query: {Query}")
+        self.Logger.info(f"Query parameters: {tuple(Parameters)}")
+        
+        Results = self.ExecuteQuery(Query, tuple(Parameters))
+        self.Logger.info(f"Query returned {len(Results)} results")
+        
+        return Results
 
     def GetFilteredBookCount(self, Category: Optional[str] = None, Subject: Optional[str] = None,
                            MinRating: int = 0) -> int:
@@ -338,6 +373,32 @@ class DatabaseManager:
             WhereConditions.append("S.Subject = ?")
             Parameters.append(Subject)
             
+        # Build query with proper JOIN types based on filters
+        if Category and Subject:
+            # Both filters - use INNER JOIN for both
+            JoinClause = """
+            INNER JOIN Categories C ON B.CategoryId = C.Id
+            INNER JOIN Subjects S ON B.SubjectId = S.Id
+            """
+        elif Category:
+            # Category filter only - use INNER JOIN for Categories
+            JoinClause = """
+            INNER JOIN Categories C ON B.CategoryId = C.Id
+            LEFT JOIN Subjects S ON B.SubjectId = S.Id
+            """
+        elif Subject:
+            # Subject filter only - use INNER JOIN for Subjects
+            JoinClause = """
+            LEFT JOIN Categories C ON B.CategoryId = C.Id
+            INNER JOIN Subjects S ON B.SubjectId = S.Id
+            """
+        else:
+            # No filters - use LEFT JOIN for both
+            JoinClause = """
+            LEFT JOIN Categories C ON B.CategoryId = C.Id
+            LEFT JOIN Subjects S ON B.SubjectId = S.Id
+            """
+        
         if WhereConditions:
             WhereClause = "WHERE " + " AND ".join(WhereConditions)
         else:
@@ -345,8 +406,7 @@ class DatabaseManager:
         
         Query = f"""SELECT COUNT(*) as FilteredCount 
                    FROM Books B
-                   LEFT JOIN Categories C ON B.CategoryId = C.Id
-                   LEFT JOIN Subjects S ON B.SubjectId = S.Id
+                   {JoinClause}
                    {WhereClause}"""
         
         Results = self.ExecuteQuery(Query, tuple(Parameters))
@@ -406,6 +466,8 @@ class DatabaseManager:
         """
         Get subjects filtered by category for dependent dropdowns
         """
+        self.Logger.info(f"GetSubjectsByCategory called with Category='{Category}'")
+        
         Query = """
         SELECT S.Subject, C.Category, COUNT(B.Id) as BookCount
         FROM Subjects S
@@ -415,7 +477,14 @@ class DatabaseManager:
         GROUP BY S.Subject, C.Category
         ORDER BY S.Subject ASC
         """
-        return self.ExecuteQuery(Query, (Category,))
+        
+        self.Logger.info(f"GetSubjectsByCategory query: {Query}")
+        self.Logger.info(f"GetSubjectsByCategory parameters: {(Category,)}")
+        
+        Results = self.ExecuteQuery(Query, (Category,))
+        self.Logger.info(f"GetSubjectsByCategory returned {len(Results)} results")
+        
+        return Results
 
     def GetAuthors(self) -> List[sqlite3.Row]:
         """

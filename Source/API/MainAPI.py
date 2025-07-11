@@ -417,6 +417,7 @@ async def FilterBooks(
         Offset = (page - 1) * limit
         
         # Apply filters
+        Logger.info(f"Filtering books: Category='{category}', Subject='{subject}', Limit={limit}, Offset={Offset}")
         BooksData = DatabaseManager.GetBooksByFilters(
             Category=category,
             Subject=subject,
@@ -439,8 +440,6 @@ async def FilterBooks(
             FilterParts.append(f"Category: {category}")
         if subject:
             FilterParts.append(f"Subject: {subject}")
-        if min_rating:
-            FilterParts.append(f"Rating: {min_rating}+ stars")
         
         Message = f"Filtered by {', '.join(FilterParts)}" if FilterParts else "All books"
         
@@ -562,9 +561,12 @@ async def GetSubjects(category: Optional[str] = Query(default=None, description=
             raise HTTPException(status_code=503, detail="Database connection failed")
         
         # FIXED: Use category name for filtering, not category_id
+        Logger.info(f"GetSubjects API called with category='{category}'")
         if category:
+            Logger.info(f"Calling GetSubjectsByCategory with category='{category}'")
             SubjectsData = DatabaseManager.GetSubjectsByCategory(category)
         else:
+            Logger.info("Calling GetSubjectsWithCounts (no category filter)")
             SubjectsData = DatabaseManager.GetSubjectsWithCounts()
         
         # FIXED: Handle missing columns properly for sqlite3.Row
@@ -647,16 +649,45 @@ async def ShutdownServer():
     
     return {"message": "Server shutdown initiated"}
 
+# Test endpoint for logo
+@App.get("/test-logo")
+async def test_logo():
+    """Test endpoint to check if logo file exists"""
+    logo_path = PROJECT_PATHS['webpages_dir'] / 'Assets' / 'BowersWorld.png'
+    if logo_path.exists():
+        return {"status": "found", "path": str(logo_path), "size": logo_path.stat().st_size}
+    else:
+        return {"status": "not found", "path": str(logo_path)}
+
 # ==================== STATIC FILE SERVING ====================
 
 # Mount static files for web interface
 if PROJECT_PATHS['webpages_dir'].exists():
-    App.mount("/", StaticFiles(directory=str(PROJECT_PATHS['webpages_dir']), html=True), name="webapp")
-    Logger.info("✅ Web application mounted at /")
+    from fastapi.responses import FileResponse
+    
+    # Add root route to serve desktop-library.html
+    @App.get("/")
+    async def serve_root():
+        return FileResponse(str(PROJECT_PATHS['webpages_dir'] / 'desktop-library.html'))
+    
+    # Mount WebPages directory to serve JS, CSS, and other static files
+    App.mount("/JS", StaticFiles(directory=str(PROJECT_PATHS['webpages_dir'] / 'JS')), name="js")
+    App.mount("/CSS", StaticFiles(directory=str(PROJECT_PATHS['webpages_dir'] / 'CSS')), name="css")
+    Logger.info("✅ Web application static files mounted")
+    Logger.info("✅ Root route configured to serve desktop-library.html")
 
-if PROJECT_PATHS['assets_dir'].exists():
+# Mount WebPages/Assets directory for images
+webpages_assets_dir = PROJECT_PATHS['webpages_dir'] / 'Assets'
+Logger.info(f"Looking for assets directory at: {webpages_assets_dir}")
+if webpages_assets_dir.exists():
+    App.mount("/assets", StaticFiles(directory=str(webpages_assets_dir)), name="assets")
+    Logger.info("✅ WebPages/Assets mounted at /assets")
+    Logger.info(f"Assets directory contents: {list(webpages_assets_dir.iterdir())}")
+elif PROJECT_PATHS['assets_dir'].exists():
     App.mount("/assets", StaticFiles(directory=str(PROJECT_PATHS['assets_dir'])), name="assets")
     Logger.info("✅ Assets mounted at /assets")
+else:
+    Logger.warning("⚠️ No assets directory found")
 
 # ==================== ERROR HANDLERS ====================
 
