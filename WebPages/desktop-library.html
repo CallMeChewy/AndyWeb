@@ -4,16 +4,16 @@ File: desktop-library.html
 Path: WebPages/desktop-library.html
 Standard: AIDEV-PascalCase-2.1
 Created: 2025-07-08
-Last Modified: 2025-07-08  11:35PM
-Description: Anderson's Library Desktop Web Interface - All 10 Issues Fixed
-- Proper BowersWorld welcome screen and branding
-- Fixed search filtering logic
-- Fixed category/subject filtering and population
-- Moved Grid/List buttons to controls section
-- Added proper search/dropdown interactions
-- Enhanced menu bar with dropdowns
-- Added BowersWorld icon and branding
-- Complete status bar with category/subject/total stats
+Last Modified: 2025-07-11  04:10PM
+Description: Anderson's Library Desktop Web Interface - UI Improvements
+- Removed Category Name from Grid and List view frames
+- Increased author name size in both views
+- Added two-column layout for List view when space permits
+- Removed About from File menu
+- Removed Tools menu entirely
+- Fixed dropdown menu formatting for Category and Subject
+- Updated status bar to show filtered counts correctly
+- Fixed screen refresh control issues
 -->
 <html lang="en">
 <head>
@@ -162,6 +162,7 @@ Description: Anderson's Library Desktop Web Interface - All 10 Issues Fixed
             margin-bottom: 12px;
             color: #ecf0f1;
             font-size: 16px;
+            text-align: center;
         }
 
         /* View Mode Buttons - Now in Controls Section */
@@ -284,8 +285,8 @@ Description: Anderson's Library Desktop Web Interface - All 10 Issues Fixed
 
         /* List View Mode */
         .books-grid.view-list {
-            display: flex;
-            flex-direction: column;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
             gap: 10px;
             padding: 20px;
         }
@@ -324,6 +325,8 @@ Description: Anderson's Library Desktop Web Interface - All 10 Issues Fixed
 
         .books-grid.view-list .book-author {
             margin-bottom: 4px;
+            font-size: 16px;
+            font-weight: 500;
         }
 
         /* Book Card Styles */
@@ -409,8 +412,9 @@ Description: Anderson's Library Desktop Web Interface - All 10 Issues Fixed
 
         .book-author {
             color: #bdc3c7;
-            font-size: 12px;
+            font-size: 14px;
             margin-bottom: 8px;
+            font-weight: 500;
         }
 
         .book-rating {
@@ -798,7 +802,6 @@ Description: Anderson's Library Desktop Web Interface - All 10 Issues Fixed
             <div class="menu-item">
                 File
                 <div class="dropdown-menu">
-                    <div class="dropdown-item" data-action="showAbout">About</div>
                     <div class="dropdown-item" data-action="showStats">Library Statistics</div>
                     <div class="dropdown-item" data-action="exitApp">Exit</div>
                 </div>
@@ -809,13 +812,6 @@ Description: Anderson's Library Desktop Web Interface - All 10 Issues Fixed
                     <div class="dropdown-item" data-action="setViewMode" data-mode="grid">Grid View</div>
                     <div class="dropdown-item" data-action="setViewMode" data-mode="list">List View</div>
                     <div class="dropdown-item" data-action="toggleViewMode">Toggle View</div>
-                </div>
-            </div>
-            <div class="menu-item">
-                Tools
-                <div class="dropdown-menu">
-                    <div class="dropdown-item" data-action="refreshLibrary">Refresh Library</div>
-                    <div class="dropdown-item" data-action="exportData">Export Data</div>
                 </div>
             </div>
             <div class="menu-item">
@@ -840,7 +836,7 @@ Description: Anderson's Library Desktop Web Interface - All 10 Issues Fixed
 
                 <!-- Controls Section with View Buttons -->
                 <div class="sidebar-section">
-                    <h3>Grid/List View</h3>
+                    <h3>Grid / List View</h3>
                     <div class="view-controls">
                         <button class="view-mode-btn active" data-mode="grid" id="viewToggleBtn">Grid View</button>
                     </div>
@@ -866,7 +862,7 @@ Description: Anderson's Library Desktop Web Interface - All 10 Issues Fixed
 
                         <!-- Subject Dropdown -->
                         <select class="desktop-dropdown" id="subjectSelect">
-                            <option value="">Select a subject...</option>
+                            <option value="">Select a category first...</option>
                         </select>
                     </div>
                 </div>

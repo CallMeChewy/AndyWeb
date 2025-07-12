@@ -5,7 +5,7 @@
 # Database: Raw SQL with PascalCase elements (NO SQLAlchemy per Design Standard v2.0)
 # SQL Naming: ALL database elements use PascalCase (tables, columns, indexes, constraints)
 # Created: 2025-07-07
-# Last Modified: 2025-07-07  09:19PM
+# Last Modified: 2025-07-11  04:15PM
 """
 Description: Enhanced Database Manager - Design Standard v2.0
 Handles all database operations for Anderson's Library web/mobile applications
@@ -46,7 +46,7 @@ class DatabaseManager:
             'isolation_level': None,     # Autocommit mode for better performance
         }
         
-        self.Logger.info(f"DatabaseManager v2.0 initialized for: {DatabasePath}")
+        self.Logger.debug(f"DatabaseManager v2.0 initialized for: {DatabasePath}")
 
     def Connect(self) -> bool:
         """
@@ -76,7 +76,7 @@ class DatabaseManager:
             TestResult = self.Connection.execute("SELECT COUNT(*) FROM Books").fetchone()
             BookCount = TestResult[0] if TestResult else 0
             
-            self.Logger.info(f"✅ Database connected successfully - {BookCount} books available")
+            self.Logger.debug(f"✅ Database connected successfully - {BookCount} books available")
             return True
             
         except sqlite3.Error as Error:
@@ -427,16 +427,50 @@ class DatabaseManager:
 
     def GetCategoriesWithCounts(self) -> List[sqlite3.Row]:
         """
-        Get categories with book counts for enhanced UI
+        Get categories with book counts and subject counts for enhanced UI
+        Format: CategoryName (#subjects/#books)
         """
-        Query = """
-        SELECT C.Category, COUNT(B.Id) as BookCount
-        FROM Categories C
-        JOIN Books B ON C.Id = B.CategoryId
-        GROUP BY C.Category
-        ORDER BY BookCount DESC, C.Category ASC
-        """
-        return self.ExecuteQuery(Query)
+        # Try the complex query first, fallback to simple if tables don't exist
+        try:
+            Query = """
+            SELECT 
+                C.Category,
+                COUNT(DISTINCT B.Id) as BookCount,
+                COUNT(DISTINCT S.Id) as SubjectCount
+            FROM Categories C
+            LEFT JOIN Books B ON C.Id = B.CategoryId
+            LEFT JOIN Subjects S ON C.Id = S.CategoryId
+            GROUP BY C.Category
+            ORDER BY BookCount DESC, C.Category ASC
+            """
+            return self.ExecuteQuery(Query)
+        except:
+            # Fallback to simple query if complex schema doesn't exist
+            Query = """
+            SELECT 
+                C.Category,
+                COUNT(DISTINCT B.Id) as BookCount,
+                0 as SubjectCount
+            FROM Categories C
+            LEFT JOIN Books B ON B.CategoryId = C.Id
+            GROUP BY C.Category
+            ORDER BY BookCount DESC, C.Category ASC
+            """
+            try:
+                return self.ExecuteQuery(Query)
+            except:
+                # Ultimate fallback - get categories directly from Books table
+                Query = """
+                SELECT 
+                    Category,
+                    COUNT(*) as BookCount,
+                    0 as SubjectCount
+                FROM Books
+                WHERE Category IS NOT NULL AND Category != ''
+                GROUP BY Category
+                ORDER BY BookCount DESC, Category ASC
+                """
+                return self.ExecuteQuery(Query)
 
     def GetSubjects(self) -> List[sqlite3.Row]:
         """
@@ -453,14 +487,28 @@ class DatabaseManager:
         """
         Get subjects with book counts for enhanced UI
         """
-        Query = """
-        SELECT S.Subject, COUNT(B.Id) as BookCount
-        FROM Subjects S
-        JOIN Books B ON S.Id = B.SubjectId
-        GROUP BY S.Subject 
-        ORDER BY BookCount DESC, S.Subject ASC
-        """
-        return self.ExecuteQuery(Query)
+        # Try the complex query first, fallback to simple if tables don't exist
+        try:
+            Query = """
+            SELECT S.Subject, COUNT(B.Id) as BookCount
+            FROM Subjects S
+            JOIN Books B ON S.Id = B.SubjectId
+            GROUP BY S.Subject 
+            ORDER BY BookCount DESC, S.Subject ASC
+            """
+            return self.ExecuteQuery(Query)
+        except:
+            # Fallback - get subjects directly from Books table
+            Query = """
+            SELECT 
+                Subject,
+                COUNT(*) as BookCount
+            FROM Books
+            WHERE Subject IS NOT NULL AND Subject != ''
+            GROUP BY Subject
+            ORDER BY BookCount DESC, Subject ASC
+            """
+            return self.ExecuteQuery(Query)
 
     def GetSubjectsByCategory(self, Category: str) -> List[sqlite3.Row]:
         """
@@ -468,20 +516,35 @@ class DatabaseManager:
         """
         self.Logger.info(f"GetSubjectsByCategory called with Category='{Category}'")
         
-        Query = """
-        SELECT S.Subject, C.Category, COUNT(B.Id) as BookCount
-        FROM Subjects S
-        JOIN Books B ON S.Id = B.SubjectId
-        JOIN Categories C ON S.CategoryId = C.Id
-        WHERE C.Category = ?
-        GROUP BY S.Subject, C.Category
-        ORDER BY S.Subject ASC
-        """
+        # Try the complex query first, fallback to simple if tables don't exist
+        try:
+            Query = """
+            SELECT S.Subject, C.Category, COUNT(B.Id) as BookCount
+            FROM Subjects S
+            JOIN Books B ON S.Id = B.SubjectId
+            JOIN Categories C ON S.CategoryId = C.Id
+            WHERE C.Category = ?
+            GROUP BY S.Subject, C.Category
+            ORDER BY S.Subject ASC
+            """
+            self.Logger.info(f"GetSubjectsByCategory query: {Query}")
+            self.Logger.info(f"GetSubjectsByCategory parameters: {(Category,)}")
+            Results = self.ExecuteQuery(Query, (Category,))
+        except:
+            # Fallback - get subjects directly from Books table filtered by category
+            Query = """
+            SELECT 
+                Subject,
+                Category,
+                COUNT(*) as BookCount
+            FROM Books
+            WHERE Category = ? AND Subject IS NOT NULL AND Subject != ''
+            GROUP BY Subject, Category
+            ORDER BY Subject ASC
+            """
+            self.Logger.info(f"GetSubjectsByCategory fallback query: {Query}")
+            Results = self.ExecuteQuery(Query, (Category,))
         
-        self.Logger.info(f"GetSubjectsByCategory query: {Query}")
-        self.Logger.info(f"GetSubjectsByCategory parameters: {(Category,)}")
-        
-        Results = self.ExecuteQuery(Query, (Category,))
         self.Logger.info(f"GetSubjectsByCategory returned {len(Results)} results")
         
         return Results
@@ -569,7 +632,7 @@ class DatabaseManager:
                 Stats['TotalPages'] = 0
                 Stats['AveragePages'] = 0
             
-            self.Logger.info(f"Retrieved library statistics: {Stats['TotalBooks']} books")
+            self.Logger.debug(f"Retrieved library statistics: {Stats['TotalBooks']} books")
             return Stats
             
         except Exception as Error:

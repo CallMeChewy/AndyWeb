@@ -6,7 +6,7 @@
 # API Endpoints: REST conventions (lowercase paths) with PascalCase backend functions
 # Database: Raw SQL with PascalCase elements (no SQLAlchemy)
 # Created: 2025-07-07
-# Last Modified: 2025-07-07  09:16PM
+# Last Modified: 2025-07-11  03:55PM
 """
 Description: Anderson's Library FastAPI Backend - Design Standard v2.0
 Enhanced API supporting both desktop web twin and mobile app interfaces
@@ -142,6 +142,7 @@ class CategoryResponse(BaseModel):
     """Response model for categories"""
     name: str
     count: int
+    subject_count: Optional[int] = 0
 
 class SubjectResponse(BaseModel):
     """Response model for subjects"""
@@ -599,7 +600,7 @@ async def GetCategories():
         CategoriesData = DatabaseManager.GetCategoriesWithCounts()
         
         Categories = [
-            CategoryResponse(name=Row['Category'], count=Row['BookCount'])
+            CategoryResponse(name=Row['Category'], count=Row['BookCount'], subject_count=Row['SubjectCount'] if 'SubjectCount' in Row.keys() else 0)
             for Row in CategoriesData
             if Row['Category']  # Filter out null categories
         ]

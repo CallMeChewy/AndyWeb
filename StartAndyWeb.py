@@ -228,6 +228,10 @@ class SmartAndyWebLauncher:
             Port = self.SelectedPort or 8000
             AppURL = f"http://127.0.0.1:{Port}/"
             
+            # Suppress GTK module warnings
+            os.environ['GTK_MODULES'] = ''
+            os.environ['GIO_EXTRA_MODULES'] = ''
+            
             # Try to open the frontend application
             webbrowser.open(AppURL)
             Logger.info(f"🌐 Opening browser to: {AppURL}")

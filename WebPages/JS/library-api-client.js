@@ -8,7 +8,7 @@
 // Constants: UPPER_SNAKE_CASE per JavaScript ecosystem standards
 // API Integration: FastAPI backend with Design Standard v2.0 compliance
 // Created: 2025-07-07
-// Last Modified: 2025-07-07  09:13PM
+// Last Modified: 2025-07-11  03:50PM
 /**
  * Description: Anderson's Library API Client - Design Standard v2.0
  * Connects desktop web twin and mobile app to FastAPI backend
@@ -750,8 +750,11 @@ class DesktopLibraryInterface {
             }
         }, true); // Use capturing phase
         
-        // Direct attachment with multiple attempts
+        // Direct attachment with multiple attempts and persistent re-attachment
         this.attachDirectHandlers();
+        
+        // Set up a mutation observer to re-attach handlers when DOM changes
+        this.setupMutationObserver();
         
         // Dropdown change handlers
         const categorySelect = document.getElementById('categorySelect');
@@ -819,6 +822,26 @@ class DesktopLibraryInterface {
         }
     }
 
+    setupMutationObserver() {
+        // Set up mutation observer to re-attach handlers when DOM changes
+        const observer = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+                    // Re-attach handlers when new nodes are added
+                    setTimeout(() => {
+                        this.attachDirectHandlers();
+                    }, 100);
+                }
+            });
+        });
+
+        // Start observing the document for changes
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+    }
+
     showAboutBox() {
         const grid = document.getElementById('booksGrid');
         if (!grid) return;
@@ -851,11 +874,13 @@ class DesktopLibraryInterface {
             sortedCategories.forEach(category => {
                 const option = document.createElement('option');
                 option.value = category.name;
-                option.textContent = `${category.name} (${category.count})`;
+                // Format as CategoryName (#subjects/#books)
+                const subjectCount = category.subject_count || 0;
+                option.textContent = `${category.name} (${subjectCount}/${category.count})`;
                 categorySelect.appendChild(option);
             });
-
-            // Categories loaded
+            
+            // Don't load subjects initially - wait for category selection
 
         } catch (error) {
             console.error('Failed to load categories:', error);
@@ -880,12 +905,21 @@ class DesktopLibraryInterface {
 
     async loadSubjects(categoryFilter = '') {
         try {
+            const subjectSelect = document.getElementById('subjectSelect');
+            if (!subjectSelect) return;
+            
+            if (!categoryFilter) {
+                // No category selected - show message and disable
+                subjectSelect.innerHTML = '<option value="">Select a category first...</option>';
+                subjectSelect.disabled = true;
+                return;
+            }
+            
             const subjects = await this.api.getSubjects(categoryFilter);
             const sortedSubjects = subjects.sort((a, b) => a.name.localeCompare(b.name));
 
-            const subjectSelect = document.getElementById('subjectSelect');
-            if (!subjectSelect) return;
             subjectSelect.innerHTML = '<option value="">All Subjects</option>';
+            subjectSelect.disabled = false;
 
             sortedSubjects.forEach(subject => {
                 const option = document.createElement('option');
@@ -902,13 +936,20 @@ class DesktopLibraryInterface {
             // Show placeholder subjects when server isn't available
             const subjectSelect = document.getElementById('subjectSelect');
             if (!subjectSelect) return;
-            subjectSelect.innerHTML = `
-                <option value="">All Subjects</option>
-                <option value="Python">Python</option>
-                <option value="JavaScript">JavaScript</option>
-                <option value="Data Science">Data Science</option>
-                <option value="Web Development">Web Development</option>
-            `;
+            
+            if (categoryFilter) {
+                subjectSelect.innerHTML = `
+                    <option value="">All Subjects</option>
+                    <option value="Python">Python</option>
+                    <option value="JavaScript">JavaScript</option>
+                    <option value="Data Science">Data Science</option>
+                    <option value="Web Development">Web Development</option>
+                `;
+            } else {
+                subjectSelect.innerHTML = `
+                    <option value="">Select a category first...</option>
+                `;
+            }
 
             if (!this.apiServerRunning) {
                 subjectSelect.disabled = true;
@@ -919,16 +960,17 @@ class DesktopLibraryInterface {
 
     async loadStats() {
         try {
-            console.log('Loading stats from API');
             const stats = await this.api.getLibraryStats();
-            console.log('Stats response:', stats);
 
             const categoriesCount = stats.total_categories || stats.categories || 0;
             const subjectsCount = stats.total_subjects || stats.subjects || 0;
             const booksCount = stats.total_books || stats.books || 0;
 
-            document.getElementById('statusStats').textContent =
+            // Update status bar with filtered counts
+            const statusText = this.currentCategory ? 
+                `${categoriesCount} Categories • ${subjectsCount} Subjects (${this.currentCategory}) • ${booksCount} Total eBooks` :
                 `${categoriesCount} Categories • ${subjectsCount} Subjects • ${booksCount} Total eBooks`;
+            document.getElementById('statusStats').textContent = statusText;
 
         } catch (error) {
             console.error('Failed to load stats:', error);
@@ -994,7 +1036,6 @@ class DesktopLibraryInterface {
                     <div class="book-info">
                         <div class="book-title">${book.title || 'Unknown Title'}</div>
                         <div class="book-author">${book.author || 'Unknown Author'}</div>
-                        <div class="book-category">${book.category || 'General'}</div>
                     </div>
                 </div>
             `;
@@ -1128,6 +1169,9 @@ class DesktopLibraryInterface {
         if (bookCountElement) {
             bookCountElement.textContent = `Showing ${count} books${context}`;
         }
+        
+        // Update status bar total to show filtered count
+        this.updateStatusBarCounts(count, filters);
     }
 
     updateStatus(message) {
@@ -1265,6 +1309,18 @@ class DesktopLibraryInterface {
         } catch (error) {
             console.error('Error shutting down server:', error);
             window.close();
+        }
+    }
+    
+    updateStatusBarCounts(displayedCount, filters = {}) {
+        const statusStatsElement = document.getElementById('statusStats');
+        if (statusStatsElement) {
+            let statusText = statusStatsElement.textContent;
+            // Update the total books count to show displayed count when filtering
+            if (filters.category || filters.subject || filters.search) {
+                statusText = statusText.replace(/\d+ Total eBooks/, `${displayedCount} Total eBooks`);
+            }
+            statusStatsElement.textContent = statusText;
         }
     }
     
