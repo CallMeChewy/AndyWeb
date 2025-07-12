@@ -1,0 +1,170 @@
+. (AndyGoogle)
+├── .claude
+├── Archive
+├── Assets
+│   ├── BowersWorld.png
+│   ├── Max.png
+│   ├── arrow.png
+│   ├── exit.png
+│   ├── hide.png
+│   ├── icon.png
+│   ├── my_library.db
+│   └── z.png
+├── Config
+├── CreateThumbs
+│   ├── ConvertToThumbnails.py
+│   └── ConvertToThumbnailsPart2.py
+├── Data
+│   ├── Covers
+│   ├── Databases
+│   │   ├── MyLibrary.db
+│   │   └── MyLibraryWeb.db
+│   ├── HTML
+│   ├── Text
+│   └── Thumbs
+├── Docs
+│   ├── 2025-07-12
+│   ├── API
+│   ├── Architecture
+│   ├── Daily
+│   ├── Development
+│   │   └── Some gitignore Rules.txt
+│   ├── Guides
+│   ├── Misc
+│   ├── Research
+│   ├── Standards
+│   │   ├── Design Standard v1.8.md
+│   │   ├── Design Standard v1.8a.md
+│   │   ├── Design Standard v1.9.md
+│   │   ├── Design Standard v2.0.md
+│   │   ├── Design Standard v2.1.md
+│   │   └── SchemaMyLihraryWeb.pdf
+│   └── Updates
+├── HTML
+│   └── GoogleAuthorzeTest.html
+├── Legacy
+│   ├── SourceAndy
+│   │   ├── Core
+│   │   │   ├── BookService.py
+│   │   │   ├── DatabaseManager.py
+│   │   │   └── __init__.py
+│   │   ├── Data
+│   │   │   ├── DatabaseModels.py
+│   │   │   ├── DatabaseModels_backup.py
+│   │   │   └── __init__.py
+│   │   ├── Framework
+│   │   │   └── __init__.py
+│   │   ├── Interface
+│   │   │   ├── BookGrid.py
+│   │   │   ├── CustomWindow.py
+│   │   │   ├── FilterPanel.py
+│   │   │   ├── MainWindow.py
+│   │   │   ├── SchemaAndy.pdf
+│   │   │   └── __init__.py
+│   │   ├── Main
+│   │   │   ├── AndersonLibrary.py
+│   │   │   └── __init__.py
+│   │   ├── Utils
+│   │   │   ├── AboutDialog.py
+│   │   │   ├── ColorTheme.py
+│   │   │   └── __init__.py
+│   │   └── __init__.py
+│   ├── SourceAndyWeb
+│   │   ├── Databases
+│   │   │   ├── MyLibrary.db
+│   │   │   └── MyLibraryWeb.db
+│   │   ├── Source
+│   │   │   ├── API
+│   │   │   │   └── MainAPI.py
+│   │   │   ├── Api
+│   │   │   ├── Core
+│   │   │   │   ├── DatabaseManager.py
+│   │   │   │   └── __init__.py
+│   │   │   ├── Data
+│   │   │   │   └── __init__.py
+│   │   │   ├── Framework
+│   │   │   │   └── __init__.py
+│   │   │   ├── Tools
+│   │   │   ├── Utils
+│   │   │   │   ├── AboutDialog.py
+│   │   │   │   ├── ColorTheme.py
+│   │   │   │   └── __init__.py
+│   │   │   └── __init__.py
+│   │   ├── WebPages
+│   │   │   ├── Assets
+│   │   │   │   └── BowersWorld.png
+│   │   │   ├── CSS
+│   │   │   ├── JS
+│   │   │   │   └── library-api-client.js
+│   │   │   ├── desktop-library.html
+│   │   │   └── mobile-library.html
+│   │   ├── StartAndyWeb.py
+│   │   └── __init__.py
+│   └── SourceOriginal
+│       ├── Andy.py
+│       └── CustomWindow.py
+├── Scripts
+│   ├── Deployment
+│   │   └── UpdateFiles.py
+│   ├── Development
+│   ├── FinderDisplay
+│   │   ├── AdvancedFileSearcher.py
+│   │   ├── FindText.py
+│   │   ├── FindTextTwo.py
+│   │   ├── ListFilesByDate.py
+│   │   ├── ListNewPy.py
+│   │   ├── NewPyDump.py
+│   │   └── SimpleTree.py
+│   ├── GitHub
+│   │   ├── BackToTheFuture.sh
+│   │   ├── GitHubAutoUpdate.py
+│   │   ├── GitHubInitialCommit.py
+│   │   ├── GitHubTimeMachine.py
+│   │   ├── GitHubUpdateSite.py
+│   │   └── TimeTraveiGitHub.py
+│   ├── System
+│   │   ├── BackupProject.py
+│   │   ├── BackupTemp.py
+│   │   └── CodebaseSum.py
+│   ├── ThisApplication
+│   │   └── WebAppDiagnostic.py
+│   └── Tools
+│       ├── ChangeBrowser.sh
+│       ├── GPU OCR Speed Test.py
+│       ├── MarkdownToText.py
+│       └── VerifyIgnore.py
+├── Source
+│   ├── API
+│   │   └── MainAPI.py
+│   ├── Api
+│   ├── Core
+│   │   ├── DatabaseManager.py
+│   │   └── __init__.py
+│   ├── Data
+│   │   └── __init__.py
+│   ├── Framework
+│   │   └── __init__.py
+│   ├── Tools
+│   ├── Utils
+│   │   ├── AboutDialog.py
+│   │   ├── ColorTheme.py
+│   │   └── __init__.py
+│   └── __init__.py
+├── TempBU
+├── Updates
+├── WebPages
+│   ├── Assets
+│   │   └── BowersWorld.png
+│   ├── CSS
+│   ├── JS
+│   │   └── library-api-client.js
+│   ├── desktop-library.html
+│   └── mobile-library.html
+├── .gitignore
+├── GEMINI.md
+├── OPTIMAL CLAUDE CODE PROMPTING STRATEGY.md
+├── Project Himalaya - Session Handoff & Next Steps Plan.md
+├── README.md
+├── StartAndyWeb.py
+├── __init__.py
+└── requirements.txt
