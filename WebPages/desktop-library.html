@@ -19,7 +19,7 @@ Description: Anderson's Library Desktop Web Interface - UI Improvements
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Anderson's Library - Professional Edition</title>
+    <title>BowersWorld.com - Educational Library Platform</title>
     <link rel="icon" href="/assets/BowersWorld.png" type="image/png">
     
     <style>
@@ -59,6 +59,52 @@ Description: Anderson's Library Desktop Web Interface - UI Improvements
             display: flex;
             gap: 20px;
             position: relative;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .menu-left {
+            display: flex;
+            gap: 20px;
+        }
+        
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            color: #ffffff;
+            font-size: 14px;
+        }
+        
+        .subscription-badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .subscription-badge.free { background: #95a5a6; }
+        .subscription-badge.scholar { background: #3498db; }
+        .subscription-badge.researcher { background: #e74c3c; }
+        .subscription-badge.institution { background: #f39c12; }
+        .subscription-badge.guest { background: #7f8c8d; }
+        
+        .auth-button {
+            padding: 6px 12px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 6px;
+            color: #ffffff;
+            text-decoration: none;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 13px;
+        }
+        
+        .auth-button:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.5);
         }
 
         .menu-item {
@@ -799,33 +845,49 @@ Description: Anderson's Library Desktop Web Interface - UI Improvements
     <div class="app-container">
         <!-- Menu Bar with Proper Dropdowns -->
         <div class="menu-bar">
-            <div class="menu-item">
-                File
-                <div class="dropdown-menu">
-                    <div class="dropdown-item" data-action="showStats">Library Statistics</div>
-                    <div class="dropdown-item" data-action="exitApp">Exit</div>
+            <div class="menu-left">
+                <div class="menu-item">
+                    File
+                    <div class="dropdown-menu">
+                        <div class="dropdown-item" data-action="showStats">Library Statistics</div>
+                        <div class="dropdown-item" data-action="exitApp">Exit</div>
+                    </div>
                 </div>
-            </div>
-            <div class="menu-item">
-                View
-                <div class="dropdown-menu">
+                <div class="menu-item">
+                    View
+                    <div class="dropdown-menu">
                     <div class="dropdown-item" data-action="setViewMode" data-mode="grid">Grid View</div>
                     <div class="dropdown-item" data-action="setViewMode" data-mode="list">List View</div>
                     <div class="dropdown-item" data-action="toggleViewMode">Toggle View</div>
                 </div>
             </div>
-            <div class="menu-item">
-                Help
-                <div class="dropdown-menu">
-                    <div class="dropdown-item" data-action="showHelp">User Guide</div>
-                    <div class="dropdown-item" data-action="showAbout">About</div>
+                <div class="menu-item">
+                    Help
+                    <div class="dropdown-menu">
+                        <div class="dropdown-item" data-action="showHelp">User Guide</div>
+                        <div class="dropdown-item" data-action="showAbout">About</div>
+                    </div>
                 </div>
+            </div>
+            
+            <!-- User Information Section -->
+            <div class="user-info" id="user-info" style="display: none;">
+                <span id="user-email"></span>
+                <span class="subscription-badge" id="user-tier"></span>
+                <button class="auth-button" onclick="handleLogout()">Logout</button>
+            </div>
+            
+            <!-- Guest/Login Section -->
+            <div class="user-info" id="guest-info">
+                <span>Guest Access</span>
+                <span class="subscription-badge guest">Limited</span>
+                <a href="/auth.html" class="auth-button">Login / Register</a>
             </div>
         </div>
 
         <!-- Title Bar -->
         <div class="title-bar">
-            <h1>Anderson's Library - Professional Edition</h1>
+            <h1>BowersWorld.com - Educational Library Platform</h1>
         </div>
 
         <!-- Main Content -->
@@ -991,11 +1053,90 @@ Description: Anderson's Library Desktop Web Interface - UI Improvements
         // Initialize when page loads
         document.addEventListener('DOMContentLoaded', function() {
             try {
+                // Initialize API client first
+                window.bowersAPI = new BowersWorldAPI();
+                
+                // Check authentication and update UI
+                updateAuthenticationUI();
+                
+                // Initialize library interface
                 window.libraryInterface = new DesktopLibraryInterface();
             } catch (error) {
                 console.error('Failed to create library interface:', error);
             }
         });
+        
+        // ==================== AUTHENTICATION FUNCTIONS ====================
+        
+        function updateAuthenticationUI() {
+            const userInfo = document.getElementById('user-info');
+            const guestInfo = document.getElementById('guest-info');
+            const userEmail = document.getElementById('user-email');
+            const userTier = document.getElementById('user-tier');
+            
+            if (window.bowersAPI && window.bowersAPI.isAuthenticated()) {
+                const user = window.bowersAPI.currentUser;
+                
+                // Show user info, hide guest info
+                userInfo.style.display = 'flex';
+                guestInfo.style.display = 'none';
+                
+                // Update user details
+                userEmail.textContent = user.username || user.email;
+                userTier.textContent = user.subscription_tier;
+                userTier.className = `subscription-badge ${user.subscription_tier}`;
+                
+            } else {
+                // Show guest info, hide user info
+                userInfo.style.display = 'none';
+                guestInfo.style.display = 'flex';
+            }
+        }
+        
+        async function handleLogout() {
+            if (window.bowersAPI) {
+                try {
+                    await window.bowersAPI.logout();
+                    updateAuthenticationUI();
+                    
+                    // Refresh the library interface for guest access
+                    if (window.libraryInterface) {
+                        window.libraryInterface.refreshLibrary();
+                    }
+                } catch (error) {
+                    console.error('Logout error:', error);
+                    alert('Logout failed. Please try again.');
+                }
+            }
+        }
+        
+        // Check subscription limits before actions
+        function checkSubscriptionLimits(action) {
+            if (!window.bowersAPI) return true;
+            
+            const canAccess = window.bowersAPI.canAccessFeature(action);
+            const limits = window.bowersAPI.getSubscriptionLimits();
+            
+            if (!canAccess) {
+                const tier = window.bowersAPI.getSubscriptionTier();
+                let message = `This feature requires a higher subscription tier.\\n\\nCurrent: ${tier}\\n\\nWould you like to upgrade?`;
+                
+                if (confirm(message)) {
+                    window.location.href = '/auth.html';
+                }
+                return false;
+            }
+            
+            return true;
+        }
+        
+        // Override book download to check permissions
+        const originalOpenPDF = window.openBookPDF || function() {};
+        window.openBookPDF = function(bookId) {
+            if (checkSubscriptionLimits('download')) {
+                originalOpenPDF(bookId);
+            }
+        };
 
 
         // Handle page close events

@@ -1,11 +1,11 @@
 # File: DatabaseManager.py
-# Path: Source/Core/DatabaseManager.py
-# Standard: AIDEV-PascalCase-2.0
+# Path: /home/herb/Desktop/AndyWeb/Source/Core/DatabaseManager.py
+# Standard: AIDEV-PascalCase-2.1
 # Backend Python: Uses PascalCase per project standards
-# Database: Raw SQL with PascalCase elements (NO SQLAlchemy per Design Standard v2.0)
+# Database: Raw SQL with PascalCase elements (NO SQLAlchemy per Design Standard v2.1)
 # SQL Naming: ALL database elements use PascalCase (tables, columns, indexes, constraints)
 # Created: 2025-07-07
-# Last Modified: 2025-07-11  04:15PM
+# Last Modified: 2025-07-25 08:15AM
 """
 Description: Enhanced Database Manager - Design Standard v2.0
 Handles all database operations for Anderson's Library web/mobile applications
@@ -16,10 +16,13 @@ Maintains exact desktop functionality while optimizing for web performance
 import sqlite3
 import logging
 import os
+import hashlib
+import secrets
 from typing import List, Dict, Any, Optional, Tuple, Union
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
+from passlib.context import CryptContext
 
 class DatabaseManager:
     """
@@ -39,6 +42,9 @@ class DatabaseManager:
         self.Connection: Optional[sqlite3.Connection] = None
         self.Logger = logging.getLogger(self.__class__.__name__)
         
+        # Password hashing configuration for BowersWorld.com user authentication
+        self.PwdContext = CryptContext(schemes=["bcrypt"], deprecated="auto")
+        
         # Connection configuration for web performance
         self.ConnectionConfig = {
             'timeout': 30.0,
@@ -46,7 +52,8 @@ class DatabaseManager:
             'isolation_level': None,     # Autocommit mode for better performance
         }
         
-        self.Logger.debug(f"DatabaseManager v2.0 initialized for: {DatabasePath}")
+        self.Logger.debug(f"DatabaseManager v2.1 initialized for: {DatabasePath}")
+        self.InitializeUserTables()
 
     def Connect(self) -> bool:
         """
@@ -912,6 +919,468 @@ class DatabaseManager:
         except Exception as Error:
             self.Logger.error(f"Error checking PDF for book {BookId}: {Error}")
             return False
+
+    # ==================== USER AUTHENTICATION METHODS ====================
+
+    def InitializeUserTables(self) -> bool:
+        """
+        Create user authentication tables if they don't exist
+        BowersWorld.com user registration and subscription management
+        """
+        try:
+            if not self.Connection:
+                self.Connect()
+            
+            # Users table for BowersWorld.com registration
+            UsersTableQuery = """
+            CREATE TABLE IF NOT EXISTS Users (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                Email TEXT UNIQUE NOT NULL,
+                Username TEXT UNIQUE,
+                PasswordHash TEXT NOT NULL,
+                SubscriptionTier TEXT DEFAULT 'free' CHECK(SubscriptionTier IN ('free', 'scholar', 'researcher', 'institution')),
+                IsActive BOOLEAN DEFAULT TRUE,
+                EmailVerified BOOLEAN DEFAULT FALSE,
+                EmailVerificationToken TEXT,
+                PasswordResetToken TEXT,
+                PasswordResetExpires DATETIME,
+                LastLoginDate DATETIME,
+                CreatedDate DATETIME DEFAULT CURRENT_TIMESTAMP,
+                ModifiedDate DATETIME DEFAULT CURRENT_TIMESTAMP,
+                ProfileData TEXT,
+                LoginAttempts INTEGER DEFAULT 0,
+                AccountLockedUntil DATETIME
+            )
+            """
+            
+            # User sessions for secure authentication
+            SessionsTableQuery = """
+            CREATE TABLE IF NOT EXISTS UserSessions (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                UserId INTEGER NOT NULL,
+                SessionToken TEXT UNIQUE NOT NULL,
+                RefreshToken TEXT UNIQUE,
+                ExpiresAt DATETIME NOT NULL,
+                RefreshExpiresAt DATETIME,
+                IpAddress TEXT,
+                UserAgent TEXT,
+                IsActive BOOLEAN DEFAULT TRUE,
+                CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+                LastAccessAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(UserId) REFERENCES Users(Id) ON DELETE CASCADE
+            )
+            """
+            
+            # Subscription history for BowersWorld.com billing
+            SubscriptionsTableQuery = """
+            CREATE TABLE IF NOT EXISTS UserSubscriptions (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                UserId INTEGER NOT NULL,
+                SubscriptionTier TEXT NOT NULL,
+                StartDate DATETIME NOT NULL,
+                EndDate DATETIME,
+                IsActive BOOLEAN DEFAULT TRUE,
+                PaymentMethod TEXT,
+                TransactionId TEXT,
+                Amount DECIMAL(10,2),
+                Currency TEXT DEFAULT 'USD',
+                CreatedDate DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(UserId) REFERENCES Users(Id) ON DELETE CASCADE
+            )
+            """
+            
+            # User activity tracking for analytics
+            UserActivityTableQuery = """
+            CREATE TABLE IF NOT EXISTS UserActivity (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                UserId INTEGER,
+                ActivityType TEXT NOT NULL,
+                ActivityData TEXT,
+                IpAddress TEXT,
+                UserAgent TEXT,
+                CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(UserId) REFERENCES Users(Id) ON DELETE SET NULL
+            )
+            """
+            
+            # Execute table creation queries
+            self.Connection.execute(UsersTableQuery)
+            self.Connection.execute(SessionsTableQuery)
+            self.Connection.execute(SubscriptionsTableQuery)
+            self.Connection.execute(UserActivityTableQuery)
+            
+            # Create indexes for performance
+            IndexQueries = [
+                "CREATE INDEX IF NOT EXISTS IX_Users_Email ON Users(Email)",
+                "CREATE INDEX IF NOT EXISTS IX_Users_Username ON Users(Username)",
+                "CREATE INDEX IF NOT EXISTS IX_Users_SubscriptionTier ON Users(SubscriptionTier)",
+                "CREATE INDEX IF NOT EXISTS IX_UserSessions_Token ON UserSessions(SessionToken)",
+                "CREATE INDEX IF NOT EXISTS IX_UserSessions_UserId ON UserSessions(UserId)",
+                "CREATE INDEX IF NOT EXISTS IX_UserSessions_ExpiresAt ON UserSessions(ExpiresAt)",
+                "CREATE INDEX IF NOT EXISTS IX_UserSubscriptions_UserId ON UserSubscriptions(UserId)",
+                "CREATE INDEX IF NOT EXISTS IX_UserActivity_UserId ON UserActivity(UserId)",
+                "CREATE INDEX IF NOT EXISTS IX_UserActivity_Type ON UserActivity(ActivityType)"
+            ]
+            
+            for IndexQuery in IndexQueries:
+                self.Connection.execute(IndexQuery)
+            
+            self.Connection.commit()
+            self.Logger.info("✅ BowersWorld.com user authentication tables initialized")
+            return True
+            
+        except Exception as Error:
+            self.Logger.error(f"Failed to initialize user tables: {Error}")
+            return False
+
+    def CreateUser(self, Email: str, Password: str, Username: Optional[str] = None, 
+                  SubscriptionTier: str = 'free') -> Optional[Dict[str, Any]]:
+        """
+        Create new user account for BowersWorld.com registration
+        
+        Args:
+            Email: User's email address (required)
+            Password: Plain text password (will be hashed)
+            Username: Optional username (defaults to email prefix)
+            SubscriptionTier: User's subscription level
+            
+        Returns:
+            Dict with user info or None if creation failed
+        """
+        try:
+            # Generate username from email if not provided
+            if not Username:
+                Username = Email.split('@')[0]
+            
+            # Hash password securely
+            PasswordHash = self.PwdContext.hash(Password)
+            
+            # Generate email verification token
+            EmailVerificationToken = secrets.token_urlsafe(32)
+            
+            Query = """
+            INSERT INTO Users (Email, Username, PasswordHash, SubscriptionTier, 
+                             EmailVerificationToken, CreatedDate, ModifiedDate)
+            VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            """
+            
+            self.Connection.execute(Query, (Email, Username, PasswordHash, 
+                                          SubscriptionTier, EmailVerificationToken))
+            self.Connection.commit()
+            
+            # Get the created user
+            NewUser = self.GetUserByEmail(Email)
+            if NewUser:
+                self.LogUserActivity(NewUser['Id'], 'user_registered', {'email': Email})
+                self.Logger.info(f"✅ New user registered: {Email} ({SubscriptionTier})")
+                return NewUser
+            
+            return None
+            
+        except sqlite3.IntegrityError as Error:
+            if "UNIQUE constraint failed: Users.Email" in str(Error):
+                self.Logger.warning(f"Registration failed - email already exists: {Email}")
+                return {'error': 'email_exists'}
+            elif "UNIQUE constraint failed: Users.Username" in str(Error):
+                self.Logger.warning(f"Registration failed - username already exists: {Username}")
+                return {'error': 'username_exists'}
+            else:
+                self.Logger.error(f"User creation integrity error: {Error}")
+                return {'error': 'integrity_error'}
+        except Exception as Error:
+            self.Logger.error(f"User creation failed: {Error}")
+            return None
+
+    def AuthenticateUser(self, Email: str, Password: str) -> Optional[Dict[str, Any]]:
+        """
+        Authenticate user login for BowersWorld.com
+        
+        Args:
+            Email: User's email address
+            Password: Plain text password
+            
+        Returns:
+            Dict with user info or None if authentication failed
+        """
+        try:
+            User = self.GetUserByEmail(Email)
+            if not User:
+                self.Logger.warning(f"Login attempt with unknown email: {Email}")
+                return None
+            
+            # Check if account is locked
+            if User['AccountLockedUntil'] and datetime.fromisoformat(User['AccountLockedUntil']) > datetime.now():
+                self.Logger.warning(f"Login attempt on locked account: {Email}")
+                return {'error': 'account_locked'}
+            
+            # Verify password
+            if self.PwdContext.verify(Password, User['PasswordHash']):
+                # Reset login attempts on successful login
+                self.ResetLoginAttempts(User['Id'])
+                
+                # Update last login date
+                UpdateQuery = "UPDATE Users SET LastLoginDate = CURRENT_TIMESTAMP WHERE Id = ?"
+                self.Connection.execute(UpdateQuery, (User['Id'],))
+                self.Connection.commit()
+                
+                self.LogUserActivity(User['Id'], 'user_login', {'email': Email})
+                self.Logger.info(f"✅ User authenticated: {Email}")
+                return User
+            else:
+                # Increment login attempts
+                self.IncrementLoginAttempts(User['Id'])
+                self.Logger.warning(f"Failed login attempt: {Email}")
+                return None
+                
+        except Exception as Error:
+            self.Logger.error(f"Authentication error: {Error}")
+            return None
+
+    def GetUserByEmail(self, Email: str) -> Optional[Dict[str, Any]]:
+        """
+        Retrieve user by email address
+        """
+        Query = "SELECT * FROM Users WHERE Email = ? AND IsActive = TRUE"
+        Results = self.ExecuteQuery(Query, (Email,))
+        return dict(Results[0]) if Results else None
+
+    def GetUserById(self, UserId: int) -> Optional[Dict[str, Any]]:
+        """
+        Retrieve user by ID
+        """
+        Query = "SELECT * FROM Users WHERE Id = ? AND IsActive = TRUE"
+        Results = self.ExecuteQuery(Query, (UserId,))
+        return dict(Results[0]) if Results else None
+
+    def CreateUserSession(self, UserId: int, IpAddress: Optional[str] = None, 
+                         UserAgent: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """
+        Create authenticated session for user
+        
+        Args:
+            UserId: User's database ID
+            IpAddress: Client IP address
+            UserAgent: Client user agent string
+            
+        Returns:
+            Dict with session tokens or None if creation failed
+        """
+        try:
+            # Generate secure tokens
+            SessionToken = secrets.token_urlsafe(32)
+            RefreshToken = secrets.token_urlsafe(32)
+            
+            # Set expiration times
+            ExpiresAt = datetime.now() + timedelta(hours=24)  # 24 hour session
+            RefreshExpiresAt = datetime.now() + timedelta(days=30)  # 30 day refresh
+            
+            Query = """
+            INSERT INTO UserSessions (UserId, SessionToken, RefreshToken, ExpiresAt, 
+                                    RefreshExpiresAt, IpAddress, UserAgent, CreatedAt, LastAccessAt)
+            VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            """
+            
+            self.Connection.execute(Query, (UserId, SessionToken, RefreshToken, 
+                                          ExpiresAt.isoformat(), RefreshExpiresAt.isoformat(),
+                                          IpAddress, UserAgent))
+            self.Connection.commit()
+            
+            self.Logger.info(f"✅ Session created for user ID: {UserId}")
+            
+            return {
+                'session_token': SessionToken,
+                'refresh_token': RefreshToken,
+                'expires_at': ExpiresAt.isoformat(),
+                'refresh_expires_at': RefreshExpiresAt.isoformat()
+            }
+            
+        except Exception as Error:
+            self.Logger.error(f"Session creation failed: {Error}")
+            return None
+
+    def ValidateSession(self, SessionToken: str) -> Optional[Dict[str, Any]]:
+        """
+        Validate user session token
+        
+        Args:
+            SessionToken: Session token to validate
+            
+        Returns:
+            Dict with user info or None if session invalid
+        """
+        try:
+            Query = """
+            SELECT s.*, u.Email, u.Username, u.SubscriptionTier
+            FROM UserSessions s
+            JOIN Users u ON s.UserId = u.Id
+            WHERE s.SessionToken = ? AND s.IsActive = TRUE 
+                  AND s.ExpiresAt > CURRENT_TIMESTAMP
+            """
+            
+            Results = self.ExecuteQuery(Query, (SessionToken,))
+            if Results:
+                # Update last access time
+                UpdateQuery = "UPDATE UserSessions SET LastAccessAt = CURRENT_TIMESTAMP WHERE SessionToken = ?"
+                self.Connection.execute(UpdateQuery, (SessionToken,))
+                self.Connection.commit()
+                
+                return dict(Results[0])
+            
+            return None
+            
+        except Exception as Error:
+            self.Logger.error(f"Session validation error: {Error}")
+            return None
+
+    def LogoutUser(self, SessionToken: str) -> bool:
+        """
+        Logout user by deactivating session
+        """
+        try:
+            Query = "UPDATE UserSessions SET IsActive = FALSE WHERE SessionToken = ?"
+            self.Connection.execute(Query, (SessionToken,))
+            self.Connection.commit()
+            
+            self.Logger.info(f"✅ User logged out: {SessionToken[:8]}...")
+            return True
+            
+        except Exception as Error:
+            self.Logger.error(f"Logout error: {Error}")
+            return False
+
+    def CleanupExpiredSessions(self) -> int:
+        """
+        Remove expired sessions from database
+        
+        Returns:
+            Number of sessions cleaned up
+        """
+        try:
+            Query = "DELETE FROM UserSessions WHERE ExpiresAt < CURRENT_TIMESTAMP OR IsActive = FALSE"
+            Cursor = self.Connection.execute(Query)
+            self.Connection.commit()
+            
+            CleanedCount = Cursor.rowcount
+            self.Logger.info(f"✅ Cleaned up {CleanedCount} expired sessions")
+            return CleanedCount
+            
+        except Exception as Error:
+            self.Logger.error(f"Session cleanup error: {Error}")
+            return 0
+
+    def IncrementLoginAttempts(self, UserId: int) -> None:
+        """
+        Increment failed login attempts and lock account if necessary
+        """
+        try:
+            # Get current attempt count
+            Query = "SELECT LoginAttempts FROM Users WHERE Id = ?"
+            Result = self.ExecuteQuery(Query, (UserId,))
+            
+            if Result:
+                CurrentAttempts = Result[0]['LoginAttempts'] + 1
+                
+                # Lock account after 5 failed attempts for 1 hour
+                if CurrentAttempts >= 5:
+                    LockUntil = datetime.now() + timedelta(hours=1)
+                    UpdateQuery = """
+                    UPDATE Users 
+                    SET LoginAttempts = ?, AccountLockedUntil = ?
+                    WHERE Id = ?
+                    """
+                    self.Connection.execute(UpdateQuery, (CurrentAttempts, LockUntil.isoformat(), UserId))
+                    self.Logger.warning(f"Account locked due to failed login attempts: User ID {UserId}")
+                else:
+                    UpdateQuery = "UPDATE Users SET LoginAttempts = ? WHERE Id = ?"
+                    self.Connection.execute(UpdateQuery, (CurrentAttempts, UserId))
+                
+                self.Connection.commit()
+                
+        except Exception as Error:
+            self.Logger.error(f"Error incrementing login attempts: {Error}")
+
+    def ResetLoginAttempts(self, UserId: int) -> None:
+        """
+        Reset failed login attempts and unlock account
+        """
+        try:
+            Query = "UPDATE Users SET LoginAttempts = 0, AccountLockedUntil = NULL WHERE Id = ?"
+            self.Connection.execute(Query, (UserId,))
+            self.Connection.commit()
+            
+        except Exception as Error:
+            self.Logger.error(f"Error resetting login attempts: {Error}")
+
+    def LogUserActivity(self, UserId: Optional[int], ActivityType: str, 
+                       ActivityData: Optional[Dict[str, Any]] = None,
+                       IpAddress: Optional[str] = None, UserAgent: Optional[str] = None) -> None:
+        """
+        Log user activity for analytics and security
+        """
+        try:
+            ActivityDataJson = json.dumps(ActivityData) if ActivityData else None
+            
+            Query = """
+            INSERT INTO UserActivity (UserId, ActivityType, ActivityData, IpAddress, UserAgent)
+            VALUES (?, ?, ?, ?, ?)
+            """
+            
+            self.Connection.execute(Query, (UserId, ActivityType, ActivityDataJson, IpAddress, UserAgent))
+            self.Connection.commit()
+            
+        except Exception as Error:
+            self.Logger.error(f"Error logging user activity: {Error}")
+
+    def GetUserStatistics(self) -> Dict[str, Any]:
+        """
+        Get BowersWorld.com user registration and subscription statistics
+        """
+        try:
+            Stats = {}
+            
+            # Total users
+            TotalUsersQuery = "SELECT COUNT(*) as Total FROM Users WHERE IsActive = TRUE"
+            Result = self.ExecuteQuery(TotalUsersQuery)
+            Stats['TotalUsers'] = Result[0]['Total'] if Result else 0
+            
+            # Users by subscription tier
+            TierQuery = """
+            SELECT SubscriptionTier, COUNT(*) as Count
+            FROM Users 
+            WHERE IsActive = TRUE
+            GROUP BY SubscriptionTier
+            """
+            TierResults = self.ExecuteQuery(TierQuery)
+            Stats['UsersByTier'] = {row['SubscriptionTier']: row['Count'] for row in TierResults}
+            
+            # New users today
+            TodayQuery = """
+            SELECT COUNT(*) as Today
+            FROM Users 
+            WHERE DATE(CreatedDate) = DATE('now') AND IsActive = TRUE
+            """
+            TodayResult = self.ExecuteQuery(TodayQuery)
+            Stats['NewUsersToday'] = TodayResult[0]['Today'] if TodayResult else 0
+            
+            # Active sessions
+            SessionQuery = """
+            SELECT COUNT(*) as Active
+            FROM UserSessions 
+            WHERE IsActive = TRUE AND ExpiresAt > CURRENT_TIMESTAMP
+            """
+            SessionResult = self.ExecuteQuery(SessionQuery)
+            Stats['ActiveSessions'] = SessionResult[0]['Active'] if SessionResult else 0
+            
+            return Stats
+            
+        except Exception as Error:
+            self.Logger.error(f"Error getting user statistics: {Error}")
+            return {
+                'TotalUsers': 0,
+                'UsersByTier': {},
+                'NewUsersToday': 0,
+                'ActiveSessions': 0
+            }
 
     def __enter__(self):
         """Context manager entry"""
