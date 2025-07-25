@@ -23,6 +23,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 import json
 from passlib.context import CryptContext
+from .AuthConfig import AuthConfig
 
 class DatabaseManager:
     """
@@ -1170,9 +1171,9 @@ class DatabaseManager:
             SessionToken = secrets.token_urlsafe(32)
             RefreshToken = secrets.token_urlsafe(32)
             
-            # Set expiration times
-            ExpiresAt = datetime.now() + timedelta(hours=24)  # 24 hour session
-            RefreshExpiresAt = datetime.now() + timedelta(days=30)  # 30 day refresh
+            # Set expiration times from configuration
+            ExpiresAt = datetime.now() + AuthConfig.SESSION_EXPIRY
+            RefreshExpiresAt = datetime.now() + AuthConfig.REFRESH_TOKEN_EXPIRY
             
             Query = """
             INSERT INTO UserSessions (UserId, SessionToken, RefreshToken, ExpiresAt, 
@@ -1280,9 +1281,9 @@ class DatabaseManager:
             if Result:
                 CurrentAttempts = Result[0]['LoginAttempts'] + 1
                 
-                # Lock account after 5 failed attempts for 1 hour
-                if CurrentAttempts >= 5:
-                    LockUntil = datetime.now() + timedelta(hours=1)
+                # Lock account after configured failed attempts
+                if CurrentAttempts >= AuthConfig.MAX_LOGIN_ATTEMPTS:
+                    LockUntil = datetime.now() + AuthConfig.LOCKOUT_DURATION
                     UpdateQuery = """
                     UPDATE Users 
                     SET LoginAttempts = ?, AccountLockedUntil = ?

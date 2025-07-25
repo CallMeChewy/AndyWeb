@@ -96,6 +96,7 @@ if SourcePath not in sys.path:
 # Import our custom modules
 try:
     from Core.DatabaseManager import DatabaseManager
+    from Core.RateLimiter import get_rate_limiter
     Logger.info("✅ DatabaseManager imported successfully")
 except ImportError as Error:
     Logger.error(f"❌ Failed to import DatabaseManager: {Error}")
@@ -315,6 +316,45 @@ async def RequireAuth(current_user: Dict[str, Any] = Depends(GetCurrentUser)) ->
         )
     return current_user
 
+# Rate limiting dependency
+async def CheckRateLimit(request: Request):
+    """
+    Check rate limits for API endpoints
+    Educational mission: Protect from abuse while preserving access
+    """
+    try:
+        rate_limiter = get_rate_limiter()
+        
+        # Get client identifier (IP address)
+        client_ip = request.client.host if request.client else "unknown"
+        endpoint = request.url.path
+        
+        # Check rate limit
+        allowed, rate_info = rate_limiter.is_allowed(client_ip, endpoint)
+        
+        if not allowed:
+            headers = {
+                "X-RateLimit-Limit": str(rate_info.get('limit', 0)),
+                "X-RateLimit-Remaining": str(rate_info.get('remaining', 0)),
+                "X-RateLimit-Reset": str(rate_info.get('reset_time', 0)),
+                "Retry-After": str(rate_info.get('retry_after', 60))
+            }
+            
+            raise HTTPException(
+                status_code=429,
+                detail="Rate limit exceeded. Please try again later.",
+                headers=headers
+            )
+        
+        # Add rate limit headers to successful responses
+        request.state.rate_limit_info = rate_info
+        
+    except HTTPException:
+        raise
+    except Exception as Error:
+        Logger.error(f"Rate limiting error: {Error}")
+        # Don't block requests if rate limiter fails
+
 # ==================== UTILITY FUNCTIONS ====================
 
 def ConvertBookToResponse(BookRow: sqlite3.Row) -> BookResponse:
@@ -352,7 +392,7 @@ def CreatePaginatedResponse(Books: List[BookResponse], Total: int, Page: int, Li
 
 # ==================== AUTHENTICATION API ENDPOINTS ===================
 
-@App.post("/api/auth/register", response_model=RegisterResponse)
+@App.post("/api/auth/register", response_model=RegisterResponse, dependencies=[Depends(CheckRateLimit)])
 async def RegisterUser(registration: UserRegistrationRequest, request: Request):
     """
     Register new user account for BowersWorld.com
@@ -415,7 +455,7 @@ async def RegisterUser(registration: UserRegistrationRequest, request: Request):
         Logger.error(f"Registration error: {Error}")
         raise HTTPException(status_code=500, detail="Registration failed")
 
-@App.post("/api/auth/login", response_model=LoginResponse)
+@App.post("/api/auth/login", response_model=LoginResponse, dependencies=[Depends(CheckRateLimit)])
 async def LoginUser(login: UserLoginRequest, request: Request):
     """
     Authenticate user login and create session
@@ -575,7 +615,7 @@ async def GetUserStats(current_user: Dict[str, Any] = Depends(RequireAuth)):
         raise HTTPException(status_code=500, detail="Failed to get user statistics")
 
 @App.post("/api/auth/cleanup-sessions")
-async def CleanupExpiredSessions():
+async def CleanupExpiredSessions(current_user: Dict[str, Any] = Depends(RequireAuth)):
     """
     Clean up expired user sessions
     Maintenance endpoint for session management
@@ -850,19 +890,6 @@ async def GetBook(book_id: int = FastAPIPath(..., description="Book ID")):
         if not BookData:
             raise HTTPException(status_code=404, detail="Book not found")
         
-        # Convert database row to response model
-        def ConvertUserToResponse(UserRow: sqlite3.Row) -> UserResponse:
-            """Convert database user row to UserResponse model"""
-            return UserResponse(
-                id=UserRow['Id'],
-                email=UserRow['Email'],
-                username=UserRow['Username'],
-                subscription_tier=UserRow['SubscriptionTier'],
-                is_active=bool(UserRow['IsActive']),
-                email_verified=bool(UserRow['EmailVerified']),
-                last_login_date=UserRow['LastLoginDate'],
-                created_date=UserRow['CreatedDate']
-            )
         
         return ConvertBookToResponse(BookData)
         
