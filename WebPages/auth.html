@@ -1,0 +1,543 @@
+# File: auth.html
+# Path: /home/herb/Desktop/AndyWeb/WebPages/auth.html
+# Standard: AIDEV-PascalCase-2.1
+# Created: 2025-07-25
+# Last Modified: 2025-07-25 08:30AM
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BowersWorld.com - Join the Educational Revolution</title>
+    <link rel="icon" href="/assets/BowersWorld.png" type="image/png">
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #333;
+        }
+
+        .auth-container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+            width: 100%;
+            max-width: 450px;
+            padding: 40px;
+            margin: 20px;
+        }
+
+        .logo-section {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .logo {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 15px;
+            border-radius: 50%;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .brand-name {
+            font-size: 28px;
+            font-weight: 700;
+            color: #2c3e50;
+            margin-bottom: 5px;
+        }
+
+        .brand-tagline {
+            font-size: 14px;
+            color: #7f8c8d;
+            margin-bottom: 20px;
+        }
+
+        .mission-statement {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-size: 16px;
+            font-weight: 600;
+            text-align: center;
+            margin-bottom: 30px;
+            line-height: 1.4;
+        }
+
+        .auth-tabs {
+            display: flex;
+            margin-bottom: 30px;
+            background: #ecf0f1;
+            border-radius: 10px;
+            padding: 4px;
+        }
+
+        .tab-button {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            background: transparent;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            color: #7f8c8d;
+        }
+
+        .tab-button.active {
+            background: white;
+            color: #2c3e50;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .form-container {
+            display: none;
+        }
+
+        .form-container.active {
+            display: block;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #2c3e50;
+            font-size: 14px;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #ecf0f1;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            background: #fafafa;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #667eea;
+            background: white;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .subscription-tiers {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .tier-option {
+            padding: 15px;
+            border: 2px solid #ecf0f1;
+            border-radius: 10px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: #fafafa;
+        }
+
+        .tier-option:hover {
+            border-color: #667eea;
+            background: #f8f9ff;
+        }
+
+        .tier-option.selected {
+            border-color: #667eea;
+            background: #667eea;
+            color: white;
+        }
+
+        .tier-name {
+            font-weight: 600;
+            font-size: 14px;
+            margin-bottom: 5px;
+        }
+
+        .tier-price {
+            font-size: 12px;
+            opacity: 0.8;
+        }
+
+        .submit-button {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 20px;
+        }
+
+        .submit-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+        }
+
+        .submit-button:active {
+            transform: translateY(0);
+        }
+
+        .submit-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #ffffff;
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .error-message {
+            background: #e74c3c;
+            color: white;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 14px;
+            display: none;
+        }
+
+        .success-message {
+            background: #27ae60;
+            color: white;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 14px;
+            display: none;
+        }
+
+        .continue-link {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .continue-link a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .continue-link a:hover {
+            text-decoration: underline;
+        }
+
+        /* Responsive design */
+        @media (max-width: 480px) {
+            .auth-container {
+                padding: 30px 20px;
+                margin: 10px;
+            }
+            
+            .subscription-tiers {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="auth-container">
+        <div class="logo-section">
+            <img src="/assets/BowersWorld.png" alt="BowersWorld Logo" class="logo">
+            <div class="brand-name">BowersWorld.com</div>
+            <div class="brand-tagline">Educational Library Platform</div>
+        </div>
+
+        <div class="mission-statement">
+            "Getting education into the hands of people who can least afford it"
+        </div>
+
+        <div class="auth-tabs">
+            <button class="tab-button active" onclick="switchTab('login')">Login</button>
+            <button class="tab-button" onclick="switchTab('register')">Join Us</button>
+        </div>
+
+        <!-- Error/Success Messages -->
+        <div id="error-message" class="error-message"></div>
+        <div id="success-message" class="success-message"></div>
+
+        <!-- Login Form -->
+        <div id="login-form" class="form-container active">
+            <form id="loginForm" onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label class="form-label" for="login-email">Email Address</label>
+                    <input type="email" id="login-email" class="form-input" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="login-password">Password</label>
+                    <input type="password" id="login-password" class="form-input" required>
+                </div>
+
+                <button type="submit" class="submit-button" id="login-submit">
+                    <span id="login-text">Enter Library</span>
+                    <span id="login-loading" class="loading" style="display: none;"></span>
+                </button>
+            </form>
+        </div>
+
+        <!-- Registration Form -->
+        <div id="register-form" class="form-container">
+            <form id="registerForm" onsubmit="handleRegistration(event)">
+                <div class="form-group">
+                    <label class="form-label" for="register-email">Email Address</label>
+                    <input type="email" id="register-email" class="form-input" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="register-username">Username (optional)</label>
+                    <input type="text" id="register-username" class="form-input" placeholder="Choose a unique username">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="register-password">Password</label>
+                    <input type="password" id="register-password" class="form-input" minlength="8" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Choose Your Membership</label>
+                    <div class="subscription-tiers">
+                        <div class="tier-option selected" onclick="selectTier(this, 'free')">
+                            <div class="tier-name">Free Explorer</div>
+                            <div class="tier-price">$0/month</div>
+                        </div>
+                        <div class="tier-option" onclick="selectTier(this, 'scholar')">
+                            <div class="tier-name">Scholar</div>
+                            <div class="tier-price">$9.99/month</div>
+                        </div>
+                        <div class="tier-option" onclick="selectTier(this, 'researcher')">
+                            <div class="tier-name">Researcher</div>
+                            <div class="tier-price">$19.99/month</div>
+                        </div>
+                        <div class="tier-option" onclick="selectTier(this, 'institution')">
+                            <div class="tier-name">Institution</div>
+                            <div class="tier-price">$99/month</div>
+                        </div>
+                    </div>
+                </div>
+
+                <input type="hidden" id="selected-tier" value="free">
+
+                <button type="submit" class="submit-button" id="register-submit">
+                    <span id="register-text">Join BowersWorld.com</span>
+                    <span id="register-loading" class="loading" style="display: none;"></span>
+                </button>
+            </form>
+        </div>
+
+        <div class="continue-link">
+            <a href="javascript:void(0)" onclick="skipAuthentication()">Continue as Guest (Limited Access)</a>
+        </div>
+    </div>
+
+    <script>
+        let currentTab = 'login';
+        let selectedSubscriptionTier = 'free';
+
+        function switchTab(tab) {
+            // Update tab buttons
+            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+            document.querySelector(`[onclick="switchTab('${tab}')"]`).classList.add('active');
+
+            // Update form containers
+            document.querySelectorAll('.form-container').forEach(container => container.classList.remove('active'));
+            document.getElementById(`${tab}-form`).classList.add('active');
+
+            currentTab = tab;
+            clearMessages();
+        }
+
+        function selectTier(element, tier) {
+            // Remove selection from all tiers
+            document.querySelectorAll('.tier-option').forEach(option => option.classList.remove('selected'));
+            
+            // Add selection to clicked tier
+            element.classList.add('selected');
+            
+            // Update hidden input
+            document.getElementById('selected-tier').value = tier;
+            selectedSubscriptionTier = tier;
+        }
+
+        function clearMessages() {
+            document.getElementById('error-message').style.display = 'none';
+            document.getElementById('success-message').style.display = 'none';
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('error-message');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            document.getElementById('success-message').style.display = 'none';
+        }
+
+        function showSuccess(message) {
+            const successDiv = document.getElementById('success-message');
+            successDiv.textContent = message;
+            successDiv.style.display = 'block';
+            document.getElementById('error-message').style.display = 'none';
+        }
+
+        function setLoading(formType, isLoading) {
+            const submitButton = document.getElementById(`${formType}-submit`);
+            const textSpan = document.getElementById(`${formType}-text`);
+            const loadingSpan = document.getElementById(`${formType}-loading`);
+
+            if (isLoading) {
+                submitButton.disabled = true;
+                textSpan.style.display = 'none';
+                loadingSpan.style.display = 'inline-block';
+            } else {
+                submitButton.disabled = false;
+                textSpan.style.display = 'inline';
+                loadingSpan.style.display = 'none';
+            }
+        }
+
+        async function handleLogin(event) {
+            event.preventDefault();
+            clearMessages();
+            setLoading('login', true);
+
+            const email = document.getElementById('login-email').value;
+            const password = document.getElementById('login-password').value;
+
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        email: email,
+                        password: password
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    // Store authentication token
+                    localStorage.setItem('auth_token', data.session_token);
+                    localStorage.setItem('refresh_token', data.refresh_token);
+                    localStorage.setItem('user_info', JSON.stringify(data.user));
+
+                    showSuccess(data.message);
+                    
+                    // Redirect to main library after 1 second
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 1000);
+                } else {
+                    showError(data.detail || 'Login failed. Please try again.');
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                showError('Network error. Please check your connection and try again.');
+            } finally {
+                setLoading('login', false);
+            }
+        }
+
+        async function handleRegistration(event) {
+            event.preventDefault();
+            clearMessages();
+            setLoading('register', true);
+
+            const email = document.getElementById('register-email').value;
+            const username = document.getElementById('register-username').value || null;
+            const password = document.getElementById('register-password').value;
+
+            try {
+                const response = await fetch('/api/auth/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        email: email,
+                        username: username,
+                        password: password,
+                        subscription_tier: selectedSubscriptionTier
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showSuccess(data.message + ' Please check your email for verification.');
+                    
+                    // Switch to login tab after successful registration
+                    setTimeout(() => {
+                        switchTab('login');
+                        document.getElementById('login-email').value = email;
+                    }, 2000);
+                } else {
+                    showError(data.detail || 'Registration failed. Please try again.');
+                }
+            } catch (error) {
+                console.error('Registration error:', error);
+                showError('Network error. Please check your connection and try again.');
+            } finally {
+                setLoading('register', false);
+            }
+        }
+
+        function skipAuthentication() {
+            // Continue to main library without authentication
+            window.location.href = '/';
+        }
+
+        // Check if user is already authenticated
+        window.addEventListener('load', function() {
+            const authToken = localStorage.getItem('auth_token');
+            if (authToken) {
+                // User is already logged in, redirect to main library
+                window.location.href = '/';
+            }
+        });
+    </script>
+</body>
+</html>

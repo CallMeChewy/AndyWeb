@@ -48,6 +48,159 @@ class AndersonLibraryAPI {
         // Performance & Caching
         this.isLoading = false;
         this.cache = new Map();
+        
+        // Initialize authentication headers
+        this.updateAuthHeaders();
+    }
+    
+    // ==================== AUTHENTICATION METHODS ====================
+    
+    loadUserInfo() {
+        try {
+            const userInfo = localStorage.getItem('user_info');
+            return userInfo ? JSON.parse(userInfo) : null;
+        } catch (error) {
+            console.error('Error loading user info:', error);
+            return null;
+        }
+    }
+    
+    updateAuthHeaders() {
+        if (this.authToken) {
+            this.defaultHeaders['Authorization'] = `Bearer ${this.authToken}`;
+        } else {
+            delete this.defaultHeaders['Authorization'];
+        }
+    }
+    
+    isAuthenticated() {
+        return !!(this.authToken && this.currentUser);
+    }
+    
+    getSubscriptionTier() {
+        return this.currentUser ? this.currentUser.subscription_tier : 'guest';
+    }
+    
+    async login(email, password) {
+        try {
+            const response = await this.makeRequest('/auth/login', {
+                method: 'POST',
+                body: JSON.stringify({ email, password })
+            });
+            
+            if (response.session_token) {
+                this.authToken = response.session_token;
+                this.refreshToken = response.refresh_token;
+                this.currentUser = response.user;
+                
+                // Store in localStorage
+                localStorage.setItem('auth_token', this.authToken);
+                localStorage.setItem('refresh_token', this.refreshToken);
+                localStorage.setItem('user_info', JSON.stringify(this.currentUser));
+                
+                this.updateAuthHeaders();
+            }
+            
+            return response;
+        } catch (error) {
+            console.error('Login error:', error);
+            throw error;
+        }
+    }
+    
+    async register(email, password, username = null, subscriptionTier = 'free') {
+        try {
+            const response = await this.makeRequest('/auth/register', {
+                method: 'POST',
+                body: JSON.stringify({
+                    email,
+                    password,
+                    username,
+                    subscription_tier: subscriptionTier
+                })
+            });
+            
+            return response;
+        } catch (error) {
+            console.error('Registration error:', error);
+            throw error;
+        }
+    }
+    
+    async logout() {
+        try {
+            if (this.authToken) {
+                await this.makeRequest('/auth/logout', {
+                    method: 'POST'
+                });
+            }
+        } catch (error) {
+            console.error('Logout error:', error);
+        } finally {
+            // Clear local authentication state
+            this.authToken = null;
+            this.refreshToken = null;
+            this.currentUser = null;
+            
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('refresh_token');
+            localStorage.removeItem('user_info');
+            
+            this.updateAuthHeaders();
+        }
+    }
+    
+    async getCurrentUser() {
+        if (!this.isAuthenticated()) {
+            return null;
+        }
+        
+        try {
+            const response = await this.makeRequest('/auth/profile');
+            this.currentUser = response;
+            localStorage.setItem('user_info', JSON.stringify(this.currentUser));
+            return response;
+        } catch (error) {
+            console.error('Error getting current user:', error);
+            return null;
+        }
+    }
+    
+    redirectToAuth() {
+        window.location.href = '/auth.html';
+    }
+    
+    // ==================== SUBSCRIPTION MANAGEMENT ====================
+    
+    canAccessFeature(feature) {
+        const tier = this.getSubscriptionTier();
+        
+        const permissions = {
+            'guest': ['browse', 'search_limited'],
+            'free': ['browse', 'search', 'download_limited'],
+            'scholar': ['browse', 'search', 'download', 'notes'],
+            'researcher': ['browse', 'search', 'download', 'notes', 'advanced_search', 'export'],
+            'institution': ['browse', 'search', 'download', 'notes', 'advanced_search', 'export', 'bulk_operations', 'admin']
+        };
+        
+        return permissions[tier]?.includes(feature) || false;
+    }
+    
+    getSubscriptionLimits() {
+        const tier = this.getSubscriptionTier();
+        
+        const limits = {
+            'guest': { downloads_per_day: 0, search_results: 10 },
+            'free': { downloads_per_day: 3, search_results: 25 },
+            'scholar': { downloads_per_day: 10, search_results: 100 },
+            'researcher': { downloads_per_day: 50, search_results: 500 },
+            'institution': { downloads_per_day: -1, search_results: -1 } // unlimited
+        };
+        
+        return limits[tier] || limits['guest'];
+    }
+    
+    // ==================== ORIGINAL LIBRARY METHODS (UPDATED) ====================
         this.cacheTimeout = 5 * 60 * 1000; // 5 minutes
         this.requestTimeouts = new Map();
         
